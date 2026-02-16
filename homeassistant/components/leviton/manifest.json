@@ -1,0 +1,11 @@
+{
+  "domain": "leviton",
+  "name": "Leviton",
+  "codeowners": ["@gtxaspec"],
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/leviton",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "quality_scale": "platinum",
+  "requirements": ["aiolevtion==0.1.0"]
+}
