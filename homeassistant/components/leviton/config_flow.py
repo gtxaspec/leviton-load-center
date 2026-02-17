@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
-from aiolevtion import (
+from aioleviton import (
     LevitonAuthError,
     LevitonClient,
     LevitonConnectionError,
@@ -29,12 +28,15 @@ from .const import (
     CONF_CALCULATED_CURRENT,
     CONF_HIDE_DUMMY,
     CONF_READ_ONLY,
+    CONF_TOKEN,
+    CONF_USER_ID,
     CONF_VOLTAGE_208,
     DEFAULT_CALCULATED_CURRENT,
     DEFAULT_HIDE_DUMMY,
     DEFAULT_READ_ONLY,
     DEFAULT_VOLTAGE_208,
     DOMAIN,
+    LOGGER,
 )
 
 CONF_CODE = "code"
@@ -49,6 +51,18 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._email: str = ""
         self._password: str = ""
+        self._client: LevitonClient | None = None
+
+    def _entry_data(self) -> dict[str, Any]:
+        """Build config entry data including stored token."""
+        data: dict[str, Any] = {
+            CONF_EMAIL: self._email,
+            CONF_PASSWORD: self._password,
+        }
+        if self._client and self._client.token and self._client.user_id:
+            data[CONF_TOKEN] = self._client.token
+            data[CONF_USER_ID] = self._client.user_id
+        return data
 
     @staticmethod
     @callback
@@ -75,24 +89,26 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 await client.login(self._email, self._password)
             except LevitonTwoFactorRequired:
+                self._client = client
                 return await self.async_step_2fa()
-            except LevitonConnectionError:
+            except LevitonConnectionError as err:
+                LOGGER.warning("Connection failed during login: %s", err)
                 errors["base"] = "cannot_connect"
-            except LevitonAuthError:
+            except LevitonAuthError as err:
+                LOGGER.warning("Authentication failed for %s: %s", self._email, err)
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Unexpected error during login")
                 errors["base"] = "unknown"
             else:
+                self._client = client
                 await self.async_set_unique_id(
                     self._email.lower().strip()
                 )
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=self._email,
-                    data={
-                        CONF_EMAIL: self._email,
-                        CONF_PASSWORD: self._password,
-                    },
+                    title=f"Leviton Load Center ({self._email})",
+                    data=self._entry_data(),
                 )
 
         return self.async_show_form(
@@ -121,27 +137,29 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 await client.login(
                     self._email, self._password, code=user_input[CONF_CODE]
                 )
-            except LevitonInvalidCode:
+            except LevitonInvalidCode as err:
+                LOGGER.warning("Invalid 2FA code for %s: %s", self._email, err)
                 errors["base"] = "invalid_code"
             except LevitonTwoFactorRequired:
                 errors["base"] = "invalid_code"
-            except LevitonConnectionError:
+            except LevitonConnectionError as err:
+                LOGGER.warning("Connection failed during 2FA: %s", err)
                 errors["base"] = "cannot_connect"
-            except LevitonAuthError:
+            except LevitonAuthError as err:
+                LOGGER.warning("Authentication failed during 2FA for %s: %s", self._email, err)
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Unexpected error during 2FA")
                 errors["base"] = "unknown"
             else:
+                self._client = client
                 await self.async_set_unique_id(
                     self._email.lower().strip()
                 )
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=self._email,
-                    data={
-                        CONF_EMAIL: self._email,
-                        CONF_PASSWORD: self._password,
-                    },
+                    title=f"Leviton Load Center ({self._email})",
+                    data=self._entry_data(),
                 )
 
         return self.async_show_form(
@@ -179,20 +197,22 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 await client.login(self._email, self._password)
             except LevitonTwoFactorRequired:
+                self._client = client
                 return await self.async_step_2fa_reauth()
-            except LevitonConnectionError:
+            except LevitonConnectionError as err:
+                LOGGER.warning("Connection failed during reauth: %s", err)
                 errors["base"] = "cannot_connect"
-            except LevitonAuthError:
+            except LevitonAuthError as err:
+                LOGGER.warning("Authentication failed during reauth for %s: %s", self._email, err)
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Unexpected error during reauth")
                 errors["base"] = "unknown"
             else:
+                self._client = client
                 return self.async_update_reload_and_abort(
                     self._get_reauth_entry(),
-                    data={
-                        CONF_EMAIL: self._email,
-                        CONF_PASSWORD: self._password,
-                    },
+                    data=self._entry_data(),
                 )
 
         return self.async_show_form(
@@ -221,23 +241,25 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 await client.login(
                     self._email, self._password, code=user_input[CONF_CODE]
                 )
-            except LevitonInvalidCode:
+            except LevitonInvalidCode as err:
+                LOGGER.warning("Invalid 2FA code during reauth for %s: %s", self._email, err)
                 errors["base"] = "invalid_code"
             except LevitonTwoFactorRequired:
                 errors["base"] = "invalid_code"
-            except LevitonConnectionError:
+            except LevitonConnectionError as err:
+                LOGGER.warning("Connection failed during 2FA reauth: %s", err)
                 errors["base"] = "cannot_connect"
-            except LevitonAuthError:
+            except LevitonAuthError as err:
+                LOGGER.warning("Auth failed during 2FA reauth for %s: %s", self._email, err)
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Unexpected error during 2FA reauth")
                 errors["base"] = "unknown"
             else:
+                self._client = client
                 return self.async_update_reload_and_abort(
                     self._get_reauth_entry(),
-                    data={
-                        CONF_EMAIL: self._email,
-                        CONF_PASSWORD: self._password,
-                    },
+                    data=self._entry_data(),
                 )
 
         return self.async_show_form(
@@ -270,22 +292,26 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             except LevitonTwoFactorRequired:
                 self._email = email
                 self._password = password
+                self._client = client
                 return await self.async_step_2fa_reconfigure()
-            except LevitonConnectionError:
+            except LevitonConnectionError as err:
+                LOGGER.warning("Connection failed during reconfigure: %s", err)
                 errors["base"] = "cannot_connect"
-            except LevitonAuthError:
+            except LevitonAuthError as err:
+                LOGGER.warning("Authentication failed during reconfigure for %s: %s", email, err)
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Unexpected error during reconfigure")
                 errors["base"] = "unknown"
             else:
+                self._email = email
+                self._password = password
+                self._client = client
                 await self.async_set_unique_id(email.lower().strip())
                 self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(
                     self._get_reconfigure_entry(),
-                    data={
-                        CONF_EMAIL: email,
-                        CONF_PASSWORD: password,
-                    },
+                    data=self._entry_data(),
                 )
 
         reconfigure_entry = self._get_reconfigure_entry()
@@ -318,25 +344,27 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 await client.login(
                     self._email, self._password, code=user_input[CONF_CODE]
                 )
-            except LevitonInvalidCode:
+            except LevitonInvalidCode as err:
+                LOGGER.warning("Invalid 2FA code during reconfigure for %s: %s", self._email, err)
                 errors["base"] = "invalid_code"
             except LevitonTwoFactorRequired:
                 errors["base"] = "invalid_code"
-            except LevitonConnectionError:
+            except LevitonConnectionError as err:
+                LOGGER.warning("Connection failed during 2FA reconfigure: %s", err)
                 errors["base"] = "cannot_connect"
-            except LevitonAuthError:
+            except LevitonAuthError as err:
+                LOGGER.warning("Auth failed during 2FA reconfigure for %s: %s", self._email, err)
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Unexpected error during 2FA reconfigure")
                 errors["base"] = "unknown"
             else:
+                self._client = client
                 await self.async_set_unique_id(self._email.lower().strip())
                 self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(
                     self._get_reconfigure_entry(),
-                    data={
-                        CONF_EMAIL: self._email,
-                        CONF_PASSWORD: self._password,
-                    },
+                    data=self._entry_data(),
                 )
 
         return self.async_show_form(

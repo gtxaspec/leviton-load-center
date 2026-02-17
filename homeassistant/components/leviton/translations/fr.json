@@ -1,0 +1,240 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurer Leviton Load Center",
+        "description": "Entrez les identifiants de votre application My Leviton pour connecter votre Leviton Load Center. Ce sont les m\u00eames identifiants que vous utilisez pour vous connecter sur my.leviton.com.",
+        "data": {
+          "email": "Adresse e-mail",
+          "password": "Mot de passe"
+        }
+      },
+      "2fa": {
+        "title": "Authentification \u00e0 deux facteurs",
+        "description": "Un code de v\u00e9rification a \u00e9t\u00e9 envoy\u00e9 \u00e0 {email}. Entrez le code ci-dessous.",
+        "data": {
+          "code": "Code de v\u00e9rification"
+        }
+      },
+      "reauth_confirm": {
+        "title": "R\u00e9authentification Leviton",
+        "description": "Votre session pour {email} a expir\u00e9. Veuillez entrer votre mot de passe pour vous reconnecter.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      },
+      "2fa_reauth": {
+        "title": "Authentification \u00e0 deux facteurs",
+        "description": "Un code de v\u00e9rification a \u00e9t\u00e9 envoy\u00e9 \u00e0 {email}. Entrez le code ci-dessous.",
+        "data": {
+          "code": "Code de v\u00e9rification"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurer Leviton",
+        "description": "Mettez \u00e0 jour les identifiants de votre compte My Leviton.",
+        "data": {
+          "email": "Adresse e-mail",
+          "password": "Mot de passe"
+        }
+      },
+      "2fa_reconfigure": {
+        "title": "Authentification \u00e0 deux facteurs",
+        "description": "Un code de v\u00e9rification a \u00e9t\u00e9 envoy\u00e9 \u00e0 {email}. Entrez le code ci-dessous.",
+        "data": {
+          "code": "Code de v\u00e9rification"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "\u00c9chec de la connexion au service cloud Leviton",
+      "invalid_auth": "Adresse e-mail ou mot de passe invalide",
+      "invalid_code": "Code de v\u00e9rification invalide",
+      "unknown": "Une erreur inattendue s'est produite"
+    },
+    "abort": {
+      "already_configured": "Ce compte Leviton est d\u00e9j\u00e0 configur\u00e9",
+      "reauth_successful": "R\u00e9authentification r\u00e9ussie",
+      "reconfigure_successful": "Reconfiguration r\u00e9ussie",
+      "unique_id_mismatch": "Le compte ne correspond pas \u00e0 la configuration existante"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Leviton Load Center",
+        "data": {
+          "voltage_208": "Syst\u00e8me \u00e9lectrique 208V",
+          "read_only": "Mode lecture seule (d\u00e9sactiver les commandes)",
+          "calculated_current": "Calculer le courant \u00e0 partir de la puissance",
+          "hide_dummy": "Masquer les disjoncteurs non intelligents"
+        },
+        "data_description": {
+          "voltage_208": "Activer pour les syst\u00e8mes triphas\u00e9s commerciaux 208V. Ajuste les calculs de tension bipolaire de 240V \u00e0 208V.",
+          "read_only": "Lorsqu'il est activ\u00e9, les commandes de d\u00e9clenchement, marche/arr\u00eat et LED ne sont pas cr\u00e9\u00e9es. Seuls les capteurs et diagnostics sont affich\u00e9s.",
+          "calculated_current": "D\u00e9river l'amp\u00e9rage \u00e0 partir de la puissance/tension au lieu du champ rmsCurrent de l'API pour une meilleure pr\u00e9cision.",
+          "hide_dummy": "Masquer les disjoncteurs de remplacement (NONE-1/NONE-2) qui n'ont pas de capteur CT LSBMA connect\u00e9."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power": {
+        "name": "Watts"
+      },
+      "current": {
+        "name": "Ampères"
+      },
+      "energy": {
+        "name": "\u00c9nergie quotidienne"
+      },
+      "breaker_status": {
+        "name": "\u00c9tat du disjoncteur"
+      },
+      "operational_status": {
+        "name": "\u00c9tat op\u00e9rationnel"
+      },
+      "remote_status": {
+        "name": "\u00c9tat \u00e0 distance"
+      },
+      "voltage": {
+        "name": "Tension"
+      },
+      "voltage_leg1": {
+        "name": "Tension phase 1"
+      },
+      "voltage_leg2": {
+        "name": "Tension phase 2"
+      },
+      "frequency": {
+        "name": "Fr\u00e9quence"
+      },
+      "frequency_leg1": {
+        "name": "Fr\u00e9quence phase 1"
+      },
+      "frequency_leg2": {
+        "name": "Fr\u00e9quence phase 2"
+      },
+      "current_leg1": {
+        "name": "Ampères phase 1"
+      },
+      "current_leg2": {
+        "name": "Ampères phase 2"
+      },
+      "power_leg1": {
+        "name": "Watts phase 1"
+      },
+      "power_leg2": {
+        "name": "Watts phase 2"
+      },
+      "amp_rating": {
+        "name": "Calibre en amp\u00e8res"
+      },
+      "ble_mac": {
+        "name": "Adresse MAC BLE"
+      },
+      "ble_rssi": {
+        "name": "RSSI BLE"
+      },
+      "firmware_ble": {
+        "name": "Micrologiciel BLE"
+      },
+      "firmware_meter": {
+        "name": "Micrologiciel compteur"
+      },
+      "firmware_protect": {
+        "name": "Micrologiciel protection"
+      },
+      "firmware_main": {
+        "name": "Micrologiciel"
+      },
+      "firmware_update": {
+        "name": "Mise \u00e0 jour micrologiciel"
+      },
+      "firmware_bcm": {
+        "name": "Micrologiciel BCM"
+      },
+      "firmware_bsm": {
+        "name": "Micrologiciel BSM"
+      },
+      "firmware_bsm_radio": {
+        "name": "Micrologiciel radio BSM"
+      },
+      "firmware_ncm": {
+        "name": "Micrologiciel NCM"
+      },
+      "ip_address": {
+        "name": "Adresse IP"
+      },
+      "mac_address": {
+        "name": "Adresse MAC"
+      },
+      "wifi_rssi": {
+        "name": "RSSI WiFi"
+      },
+      "wifi_mode": {
+        "name": "Mode WiFi"
+      },
+      "wifi_ssid": {
+        "name": "SSID WiFi"
+      },
+      "leg": {
+        "name": "Phase"
+      },
+      "poles": {
+        "name": "P\u00f4les"
+      },
+      "position": {
+        "name": "Position"
+      },
+      "serial_number": {
+        "name": "Num\u00e9ro de s\u00e9rie"
+      },
+      "lifetime_energy": {
+        "name": "\u00c9nergie cumul\u00e9e"
+      },
+      "lifetime_energy_import": {
+        "name": "\u00c9nergie import\u00e9e cumul\u00e9e"
+      },
+      "residence_id": {
+        "name": "ID de r\u00e9sidence"
+      },
+      "usage_type": {
+        "name": "Type d'utilisation"
+      }
+    },
+    "switch": {
+      "breaker": {
+        "name": "Disjoncteur"
+      }
+    },
+    "button": {
+      "trip": {
+        "name": "D\u00e9clencher"
+      },
+      "identify": {
+        "name": "Identifier"
+      }
+    },
+    "binary_sensor": {
+      "connectivity": {
+        "name": "Connectivit\u00e9"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "\u00c9chec de la connexion au service cloud Leviton"
+    },
+    "invalid_auth": {
+      "message": "Identifiants de compte Leviton invalides"
+    },
+    "breaker_control_failed": {
+      "message": "\u00c9chec du contr\u00f4le du disjoncteur {name}\u00a0: {error}"
+    },
+    "identify_failed": {
+      "message": "\u00c9chec de l'identification de l'appareil {name}\u00a0: {error}"
+    }
+  }
+}

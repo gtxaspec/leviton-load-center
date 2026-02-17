@@ -1,0 +1,153 @@
+{
+  "entity": {
+    "sensor": {
+      "power": {
+        "default": "mdi:flash"
+      },
+      "current": {
+        "default": "mdi:current-ac"
+      },
+      "energy": {
+        "default": "mdi:lightning-bolt"
+      },
+      "lifetime_energy": {
+        "default": "mdi:lightning-bolt"
+      },
+      "lifetime_energy_import": {
+        "default": "mdi:transmission-tower-import"
+      },
+      "breaker_status": {
+        "default": "mdi:electric-switch"
+      },
+      "operational_status": {
+        "default": "mdi:list-status"
+      },
+      "remote_status": {
+        "default": "mdi:remote"
+      },
+      "voltage": {
+        "default": "mdi:sine-wave"
+      },
+      "voltage_leg1": {
+        "default": "mdi:sine-wave"
+      },
+      "voltage_leg2": {
+        "default": "mdi:sine-wave"
+      },
+      "frequency": {
+        "default": "mdi:waveform"
+      },
+      "frequency_leg1": {
+        "default": "mdi:waveform"
+      },
+      "frequency_leg2": {
+        "default": "mdi:waveform"
+      },
+      "current_leg1": {
+        "default": "mdi:current-ac"
+      },
+      "current_leg2": {
+        "default": "mdi:current-ac"
+      },
+      "power_leg1": {
+        "default": "mdi:flash"
+      },
+      "power_leg2": {
+        "default": "mdi:flash"
+      },
+      "amp_rating": {
+        "default": "mdi:information-outline"
+      },
+      "ble_mac": {
+        "default": "mdi:bluetooth"
+      },
+      "ble_rssi": {
+        "default": "mdi:bluetooth-audio"
+      },
+      "firmware_ble": {
+        "default": "mdi:chip"
+      },
+      "firmware_meter": {
+        "default": "mdi:chip"
+      },
+      "firmware_protect": {
+        "default": "mdi:chip"
+      },
+      "firmware_main": {
+        "default": "mdi:chip"
+      },
+      "firmware_update": {
+        "default": "mdi:update"
+      },
+      "firmware_bcm": {
+        "default": "mdi:chip"
+      },
+      "firmware_bsm": {
+        "default": "mdi:chip"
+      },
+      "firmware_bsm_radio": {
+        "default": "mdi:chip"
+      },
+      "firmware_ncm": {
+        "default": "mdi:chip"
+      },
+      "leg": {
+        "default": "mdi:numeric"
+      },
+      "poles": {
+        "default": "mdi:numeric"
+      },
+      "position": {
+        "default": "mdi:numeric"
+      },
+      "serial_number": {
+        "default": "mdi:identifier"
+      },
+      "ip_address": {
+        "default": "mdi:ip-network"
+      },
+      "mac_address": {
+        "default": "mdi:network"
+      },
+      "wifi_rssi": {
+        "default": "mdi:wifi"
+      },
+      "wifi_mode": {
+        "default": "mdi:wifi-cog"
+      },
+      "wifi_ssid": {
+        "default": "mdi:wifi"
+      },
+      "residence_id": {
+        "default": "mdi:home"
+      },
+      "usage_type": {
+        "default": "mdi:tag"
+      }
+    },
+    "switch": {
+      "breaker": {
+        "default": "mdi:electric-switch-closed",
+        "state": {
+          "off": "mdi:electric-switch"
+        }
+      }
+    },
+    "button": {
+      "trip": {
+        "default": "mdi:electric-switch"
+      },
+      "identify": {
+        "default": "mdi:led-on"
+      }
+    },
+    "binary_sensor": {
+      "connectivity": {
+        "default": "mdi:lan-connect",
+        "state": {
+          "off": "mdi:lan-disconnect"
+        }
+      }
+    }
+  }
+}

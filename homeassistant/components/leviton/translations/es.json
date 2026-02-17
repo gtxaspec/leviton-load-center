@@ -1,0 +1,240 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurar Leviton Load Center",
+        "description": "Introduce las credenciales de tu aplicaci\u00f3n My Leviton para conectar tu Leviton Load Center. Son las mismas credenciales que usas para iniciar sesi\u00f3n en my.leviton.com.",
+        "data": {
+          "email": "Correo electr\u00f3nico",
+          "password": "Contrase\u00f1a"
+        }
+      },
+      "2fa": {
+        "title": "Autenticaci\u00f3n de dos factores",
+        "description": "Se ha enviado un c\u00f3digo de verificaci\u00f3n a {email}. Introd\u00facelo a continuaci\u00f3n.",
+        "data": {
+          "code": "C\u00f3digo de verificaci\u00f3n"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reautenticar con Leviton",
+        "description": "Tu sesi\u00f3n de {email} ha expirado. Introduce tu contrase\u00f1a para reconectar.",
+        "data": {
+          "password": "Contrase\u00f1a"
+        }
+      },
+      "2fa_reauth": {
+        "title": "Autenticaci\u00f3n de dos factores",
+        "description": "Se ha enviado un c\u00f3digo de verificaci\u00f3n a {email}. Introd\u00facelo a continuaci\u00f3n.",
+        "data": {
+          "code": "C\u00f3digo de verificaci\u00f3n"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurar Leviton",
+        "description": "Actualiza las credenciales de tu cuenta My Leviton.",
+        "data": {
+          "email": "Correo electr\u00f3nico",
+          "password": "Contrase\u00f1a"
+        }
+      },
+      "2fa_reconfigure": {
+        "title": "Autenticaci\u00f3n de dos factores",
+        "description": "Se ha enviado un c\u00f3digo de verificaci\u00f3n a {email}. Introd\u00facelo a continuaci\u00f3n.",
+        "data": {
+          "code": "C\u00f3digo de verificaci\u00f3n"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se pudo conectar al servicio en la nube de Leviton",
+      "invalid_auth": "Correo electr\u00f3nico o contrase\u00f1a inv\u00e1lidos",
+      "invalid_code": "C\u00f3digo de verificaci\u00f3n inv\u00e1lido",
+      "unknown": "Ocurri\u00f3 un error inesperado"
+    },
+    "abort": {
+      "already_configured": "Esta cuenta de Leviton ya est\u00e1 configurada",
+      "reauth_successful": "Reautenticaci\u00f3n exitosa",
+      "reconfigure_successful": "Reconfiguraci\u00f3n exitosa",
+      "unique_id_mismatch": "La cuenta no coincide con la configuraci\u00f3n existente"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Leviton Load Center",
+        "data": {
+          "voltage_208": "Sistema el\u00e9ctrico de 208V",
+          "read_only": "Modo solo lectura (desactivar controles)",
+          "calculated_current": "Calcular corriente a partir de la potencia",
+          "hide_dummy": "Ocultar interruptores no inteligentes"
+        },
+        "data_description": {
+          "voltage_208": "Activar para sistemas trif\u00e1sicos comerciales de 208V. Ajusta los c\u00e1lculos de voltaje bipolar de 240V a 208V.",
+          "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
+          "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
+          "hide_dummy": "Ocultar interruptores de marcador de posici\u00f3n (NONE-1/NONE-2) que no tienen un sensor CT LSBMA conectado."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power": {
+        "name": "Vatios"
+      },
+      "current": {
+        "name": "Amperios"
+      },
+      "energy": {
+        "name": "Energ\u00eda diaria"
+      },
+      "breaker_status": {
+        "name": "Estado del interruptor"
+      },
+      "operational_status": {
+        "name": "Estado operacional"
+      },
+      "remote_status": {
+        "name": "Estado remoto"
+      },
+      "voltage": {
+        "name": "Voltaje"
+      },
+      "voltage_leg1": {
+        "name": "Voltaje fase 1"
+      },
+      "voltage_leg2": {
+        "name": "Voltaje fase 2"
+      },
+      "frequency": {
+        "name": "Frecuencia"
+      },
+      "frequency_leg1": {
+        "name": "Frecuencia fase 1"
+      },
+      "frequency_leg2": {
+        "name": "Frecuencia fase 2"
+      },
+      "current_leg1": {
+        "name": "Amperios fase 1"
+      },
+      "current_leg2": {
+        "name": "Amperios fase 2"
+      },
+      "power_leg1": {
+        "name": "Vatios fase 1"
+      },
+      "power_leg2": {
+        "name": "Vatios fase 2"
+      },
+      "amp_rating": {
+        "name": "Capacidad en amperios"
+      },
+      "ble_mac": {
+        "name": "Direcci\u00f3n MAC BLE"
+      },
+      "ble_rssi": {
+        "name": "RSSI BLE"
+      },
+      "firmware_ble": {
+        "name": "Firmware BLE"
+      },
+      "firmware_meter": {
+        "name": "Firmware medidor"
+      },
+      "firmware_protect": {
+        "name": "Firmware protecci\u00f3n"
+      },
+      "firmware_main": {
+        "name": "Firmware"
+      },
+      "firmware_update": {
+        "name": "Actualizaci\u00f3n de firmware"
+      },
+      "firmware_bcm": {
+        "name": "Firmware BCM"
+      },
+      "firmware_bsm": {
+        "name": "Firmware BSM"
+      },
+      "firmware_bsm_radio": {
+        "name": "Firmware radio BSM"
+      },
+      "firmware_ncm": {
+        "name": "Firmware NCM"
+      },
+      "ip_address": {
+        "name": "Direcci\u00f3n IP"
+      },
+      "mac_address": {
+        "name": "Direcci\u00f3n MAC"
+      },
+      "wifi_rssi": {
+        "name": "RSSI WiFi"
+      },
+      "wifi_mode": {
+        "name": "Modo WiFi"
+      },
+      "wifi_ssid": {
+        "name": "SSID WiFi"
+      },
+      "leg": {
+        "name": "Fase"
+      },
+      "poles": {
+        "name": "Polos"
+      },
+      "position": {
+        "name": "Posici\u00f3n"
+      },
+      "serial_number": {
+        "name": "N\u00famero de serie"
+      },
+      "lifetime_energy": {
+        "name": "Energ\u00eda acumulada"
+      },
+      "lifetime_energy_import": {
+        "name": "Energ\u00eda importada acumulada"
+      },
+      "residence_id": {
+        "name": "ID de residencia"
+      },
+      "usage_type": {
+        "name": "Tipo de uso"
+      }
+    },
+    "switch": {
+      "breaker": {
+        "name": "Interruptor"
+      }
+    },
+    "button": {
+      "trip": {
+        "name": "Disparar"
+      },
+      "identify": {
+        "name": "Identificar"
+      }
+    },
+    "binary_sensor": {
+      "connectivity": {
+        "name": "Conectividad"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "No se pudo conectar al servicio en la nube de Leviton"
+    },
+    "invalid_auth": {
+      "message": "Credenciales de cuenta Leviton inv\u00e1lidas"
+    },
+    "breaker_control_failed": {
+      "message": "Error al controlar el interruptor {name}: {error}"
+    },
+    "identify_failed": {
+      "message": "Error al identificar el dispositivo {name}: {error}"
+    }
+  }
+}

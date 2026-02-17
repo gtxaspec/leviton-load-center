@@ -7,7 +7,7 @@ from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import LevitonCoordinator
+from .coordinator import LevitonCoordinator, LevitonData
 
 
 class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
@@ -26,13 +26,19 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
         super().__init__(coordinator)
         self.entity_description = description
         self._device_id = device_id
-        self._attr_unique_id = f"{device_id}_{description.key}"
+        entry_uid = coordinator.config_entry.unique_id or ""
+        self._attr_unique_id = f"{entry_uid}_{device_id}_{description.key}"
         self._attr_device_info = device_info
 
+    @property
+    def _data(self) -> LevitonData:
+        """Return the coordinator data."""
+        return self.coordinator.data
 
-def whem_device_info(whem_id: str, coordinator: LevitonCoordinator) -> DeviceInfo:
+
+def whem_device_info(whem_id: str, data: LevitonData) -> DeviceInfo:
     """Build DeviceInfo for a LWHEM hub."""
-    whem = coordinator.data.whems[whem_id]
+    whem = data.whems[whem_id]
     return DeviceInfo(
         identifiers={(DOMAIN, whem_id)},
         name=whem.name or f"LWHEM {whem_id}",
@@ -43,35 +49,31 @@ def whem_device_info(whem_id: str, coordinator: LevitonCoordinator) -> DeviceInf
     )
 
 
-def panel_device_info(
-    panel_id: str, coordinator: LevitonCoordinator
-) -> DeviceInfo:
+def panel_device_info(panel_id: str, data: LevitonData) -> DeviceInfo:
     """Build DeviceInfo for a DAU panel."""
-    panel = coordinator.data.panels[panel_id]
+    panel = data.panels[panel_id]
     return DeviceInfo(
         identifiers={(DOMAIN, panel_id)},
         name=panel.name or f"Panel {panel_id}",
-        manufacturer=panel.manufacturer,
-        model=panel.model,
+        manufacturer="Leviton",
+        model="LDATA",
         sw_version=panel.package_ver,
         serial_number=panel.id,
     )
 
 
-def breaker_device_info(
-    breaker_id: str, coordinator: LevitonCoordinator
-) -> DeviceInfo:
+def breaker_device_info(breaker_id: str, data: LevitonData) -> DeviceInfo:
     """Build DeviceInfo for a breaker."""
-    breaker = coordinator.data.breakers[breaker_id]
+    breaker = data.breakers[breaker_id]
     name = breaker.name or f"Breaker {breaker.position}"
 
     # Determine parent hub
     via_device: tuple[str, str] | None = None
-    if breaker.iot_whem_id and breaker.iot_whem_id in coordinator.data.whems:
+    if breaker.iot_whem_id and breaker.iot_whem_id in data.whems:
         via_device = (DOMAIN, breaker.iot_whem_id)
     elif (
         breaker.residential_breaker_panel_id
-        and breaker.residential_breaker_panel_id in coordinator.data.panels
+        and breaker.residential_breaker_panel_id in data.panels
     ):
         via_device = (DOMAIN, breaker.residential_breaker_panel_id)
 
@@ -87,21 +89,19 @@ def breaker_device_info(
     )
 
 
-def ct_device_info(
-    ct_id: int, coordinator: LevitonCoordinator
-) -> DeviceInfo:
+def ct_device_info(ct_id: int, data: LevitonData) -> DeviceInfo:
     """Build DeviceInfo for a CT clamp."""
-    ct = coordinator.data.cts[ct_id]
+    ct = data.cts[ct_id]
     name = ct.name or f"CT Channel {ct.channel}"
 
     via_device: tuple[str, str] | None = None
-    if ct.iot_whem_id and ct.iot_whem_id in coordinator.data.whems:
+    if ct.iot_whem_id and ct.iot_whem_id in data.whems:
         via_device = (DOMAIN, ct.iot_whem_id)
 
     return DeviceInfo(
         identifiers={(DOMAIN, str(ct_id))},
         name=name,
         manufacturer="Leviton",
-        model="LSBMA CT",
+        model="LWHEM CT",
         via_device=via_device,
     )

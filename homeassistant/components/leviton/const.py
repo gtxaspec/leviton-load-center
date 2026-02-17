@@ -6,7 +6,10 @@ import logging
 
 DOMAIN = "leviton"
 LOGGER = logging.getLogger(__package__)
+LOGGER.setLevel(logging.DEBUG)
 
+CONF_TOKEN = "token"
+CONF_USER_ID = "user_id"
 CONF_VOLTAGE_208 = "voltage_208"
 CONF_READ_ONLY = "read_only"
 CONF_CALCULATED_CURRENT = "calculated_current"

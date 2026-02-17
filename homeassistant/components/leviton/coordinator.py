@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
-from aiolevtion import (
+from aioleviton import (
     Breaker,
     Ct,
     LevitonAuthError,
@@ -21,12 +22,16 @@ from aiolevtion import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
-from .const import LOGGER
+from .const import DOMAIN, LOGGER
+
+STORAGE_VERSION = 1
 
 type LevitonConfigEntry = ConfigEntry[LevitonRuntimeData]
 
@@ -48,6 +53,7 @@ class LevitonData:
     breakers: dict[str, Breaker] = field(default_factory=dict)
     cts: dict[int, Ct] = field(default_factory=dict)
     residences: dict[int, Residence] = field(default_factory=dict)
+    daily_baselines: dict[str, float] = field(default_factory=dict)
 
 
 class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
@@ -67,18 +73,71 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             logger=LOGGER,
             name="Leviton",
             config_entry=entry,
-            update_interval=timedelta(minutes=5),
+            update_interval=timedelta(minutes=10),
         )
         self.client = client
         self.ws: LevitonWebSocket | None = None
         self._residence_ids: list[int] = []
         self._ws_remove_notification: Any = None
         self._ws_remove_disconnect: Any = None
+        self._midnight_unsub: Any = None
+        self._baseline_store = Store[dict[str, float]](
+            hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.daily_baselines"
+        )
 
     async def _async_setup(self) -> None:
         """Discover devices and connect WebSocket on first refresh."""
         await self._discover_devices()
         await self._connect_websocket()
+        await self._load_daily_baselines()
+        self._midnight_unsub = async_track_time_change(
+            self.hass, self._handle_midnight, hour=0, minute=0, second=0
+        )
+
+    async def _load_daily_baselines(self) -> None:
+        """Load daily baselines from storage, or snapshot current values."""
+        stored = await self._baseline_store.async_load()
+        if stored:
+            self.data.daily_baselines = stored
+        else:
+            self._snapshot_daily_baselines()
+            await self._baseline_store.async_save(self.data.daily_baselines)
+
+    @callback
+    def _snapshot_daily_baselines(self) -> None:
+        """Record current lifetime energy as the daily baseline."""
+        for breaker_id, breaker in self.data.breakers.items():
+            if breaker.energy_consumption is not None:
+                self.data.daily_baselines[breaker_id] = breaker.energy_consumption
+        for ct_id, ct in self.data.cts.items():
+            ct_total = (ct.energy_consumption or 0) + (
+                ct.energy_consumption_2 or 0
+            )
+            self.data.daily_baselines[f"ct_{ct_id}"] = ct_total
+
+    async def _async_handle_midnight(self) -> None:
+        """Reset daily energy baselines at midnight and persist."""
+        self._snapshot_daily_baselines()
+        await self._baseline_store.async_save(self.data.daily_baselines)
+        self.async_set_updated_data(self.data)
+
+    @callback
+    def _handle_midnight(self, _now: Any) -> None:
+        """Schedule the async midnight handler."""
+        self.hass.async_create_task(self._async_handle_midnight())
+
+    @staticmethod
+    def calc_daily_energy(
+        breaker_id: str, lifetime: float | None, data: LevitonData
+    ) -> float | None:
+        """Get daily energy for a breaker (current lifetime - midnight baseline)."""
+        if lifetime is None:
+            return None
+        baseline = data.daily_baselines.get(breaker_id)
+        if baseline is None:
+            return None
+        daily = lifetime - baseline
+        return round(max(0.0, daily), 2)
 
     async def _discover_devices(self) -> None:
         """Discover all residences, hubs, breakers, and CTs."""
@@ -89,19 +148,26 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         except LevitonConnectionError as err:
             raise UpdateFailed(str(err)) from err
 
-        # Collect all account IDs from permissions
+        # Collect residence IDs from two sources in permissions:
+        # 1. Direct residenceId on the permission (admin/shared access)
+        # 2. Via residentialAccountId -> account -> residences (owner access)
+        residence_ids: set[int] = set()
         account_ids: set[int] = set()
+
         for perm in permissions:
+            if perm.residence_id is not None:
+                residence_ids.add(perm.residence_id)
             if perm.residential_account_id is not None:
                 account_ids.add(perm.residential_account_id)
 
-        # Get residences from each account
+        # Also fetch residences via account path
         residences: dict[int, Residence] = {}
         for account_id in account_ids:
             try:
                 account_residences = await self.client.get_residences(account_id)
                 for res in account_residences:
                     residences[res.id] = res
+                    residence_ids.add(res.id)
             except LevitonConnectionError as err:
                 LOGGER.warning(
                     "Failed to fetch residences for account %s: %s",
@@ -109,8 +175,12 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     err,
                 )
 
-        self._residence_ids = list(residences.keys())
+        self._residence_ids = list(residence_ids)
         self.data = LevitonData(residences=residences)
+
+        LOGGER.debug(
+            "Discovered %d residences: %s", len(self._residence_ids), self._residence_ids
+        )
 
         # Discover hubs and their children in each residence
         for residence_id in self._residence_ids:
@@ -118,9 +188,12 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
     async def _discover_residence_devices(self, residence_id: int) -> None:
         """Discover all devices in a single residence."""
+        LOGGER.debug("Discovering devices in residence %s", residence_id)
+
         # LWHEM hubs
         try:
             whems = await self.client.get_whems(residence_id)
+            LOGGER.debug("Found %d WHEMs in residence %s", len(whems), residence_id)
             for whem in whems:
                 self.data.whems[whem.id] = whem
                 # Get breakers for this WHEM
@@ -197,9 +270,10 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             self._handle_ws_disconnect
         )
 
-        # Subscribe to all LWHEM hubs
+        # Subscribe to all LWHEM hubs and enable bandwidth
         for whem_id in self.data.whems:
             try:
+                await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
                 await self.ws.subscribe("IotWhem", whem_id)
             except LevitonConnectionError:
                 LOGGER.warning("Failed to subscribe to WHEM %s", whem_id)
@@ -211,6 +285,57 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 await self.ws.subscribe("ResidentialBreakerPanel", panel_id)
             except LevitonConnectionError:
                 LOGGER.warning("Failed to subscribe to panel %s", panel_id)
+
+        # Subscribe to individual breakers for WHEMs on FW 2.0.0+.
+        # FW 2.0.13+ stopped delivering breaker updates as nested arrays
+        # in IotWhem notifications. Individual subscriptions are required.
+        # On older FW, the hub subscription covers breakers -- skip to
+        # avoid duplicate notifications and wasted bandwidth.
+        # CTs are always delivered via the hub subscription on all FW.
+        for whem_id, whem in self.data.whems.items():
+            if not self._needs_individual_breaker_subs(whem):
+                LOGGER.debug(
+                    "WHEM %s on FW %s: hub subscription covers breakers",
+                    whem_id,
+                    whem.version,
+                )
+                continue
+            LOGGER.debug(
+                "WHEM %s on FW %s: subscribing to individual breakers",
+                whem_id,
+                whem.version,
+            )
+            for breaker_id, breaker in self.data.breakers.items():
+                if breaker.iot_whem_id != whem_id:
+                    continue
+                try:
+                    await self.ws.subscribe("ResidentialBreaker", breaker_id)
+                except LevitonConnectionError:
+                    LOGGER.debug(
+                        "Failed to subscribe to breaker %s", breaker_id
+                    )
+
+        # Bandwidth is set once on connect (above). The WHEM auto-reverts
+        # from 1 to 2 within seconds, and 2 is sufficient for real-time push.
+        # The app re-sends every ~25s, but we haven't observed bandwidth
+        # dropping back to 0 on its own -- avoid unnecessary API calls.
+
+    @staticmethod
+    def _needs_individual_breaker_subs(whem: Whem) -> bool:
+        """Check if a WHEM needs individual breaker subscriptions.
+
+        FW 2.0.0+ stopped delivering breaker updates as nested arrays in
+        IotWhem parent notifications. Individual ResidentialBreaker
+        subscriptions are required. On older FW (1.x), the hub subscription
+        delivers all child updates and individual subs are redundant.
+        """
+        if whem.version is None:
+            return True  # Assume newest FW if unknown
+        try:
+            parts = tuple(int(x) for x in whem.version.split("."))
+            return parts >= (2, 0, 0)
+        except (ValueError, AttributeError):
+            return True  # Assume newest FW if unparseable
 
     @callback
     def _handle_ws_notification(self, notification: dict[str, Any]) -> None:
@@ -285,14 +410,28 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
     @callback
     def _handle_ws_disconnect(self) -> None:
-        """Handle WebSocket disconnect."""
-        LOGGER.info("WebSocket disconnected, relying on REST polling")
+        """Handle WebSocket disconnect - schedule reconnection."""
+        LOGGER.warning("WebSocket disconnected, falling back to REST polling")
         self.ws = None
+        # Schedule a reconnection attempt
+        self.hass.async_create_task(self._reconnect_websocket())
 
     async def _async_update_data(self) -> LevitonData:
-        """Fallback REST polling - refresh all device data."""
+        """Fallback REST polling - only runs when WebSocket is disconnected.
+
+        TODO: Consider removing REST fallback entirely. The official Leviton app
+        does not do periodic REST polling at all -- it relies purely on WebSocket
+        push. REST data calls in the app are only triggered by user navigation.
+        If WebSocket is truly unavailable, entities going unavailable via the
+        coordinator is the correct UX. See API_BANDWIDTH.md for full analysis.
+        """
+        if self.ws is not None:
+            LOGGER.debug("WebSocket connected, skipping REST poll")
+            return self.data
+
+        LOGGER.debug("WebSocket disconnected, running REST fallback poll")
         try:
-            # Refresh WHEM hubs
+            # Refresh WHEM hubs and their children
             for whem_id in list(self.data.whems):
                 whem = await self.client.get_whem(whem_id)
                 self.data.whems[whem_id] = whem
@@ -305,7 +444,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 for ct in cts:
                     self.data.cts[ct.id] = ct
 
-            # Refresh DAU panels
+            # Refresh DAU panels and their children
             for panel_id in list(self.data.panels):
                 panel = await self.client.get_panel(panel_id)
                 self.data.panels[panel_id] = panel
@@ -314,10 +453,6 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 for breaker in breakers:
                     self.data.breakers[breaker.id] = breaker
 
-            # Check for new devices in residences
-            for residence_id in self._residence_ids:
-                await self._discover_residence_devices(residence_id)
-
         except LevitonAuthError as err:
             raise ConfigEntryAuthFailed(err) from err
         except LevitonConnectionError as err:
@@ -325,21 +460,66 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
         return self.data
 
+    async def _reconnect_websocket(self) -> None:
+        """Attempt to reconnect WebSocket with exponential backoff."""
+        delays = [10, 30, 60, 120, 300]  # seconds
+        for attempt, delay in enumerate(delays, 1):
+            LOGGER.debug(
+                "WebSocket reconnection attempt %d in %d seconds", attempt, delay
+            )
+            await asyncio.sleep(delay)
+
+            # Validate token before attempting WS reconnect (WS module
+            # can't distinguish auth failures from connection failures)
+            try:
+                await self.client.get_permissions()
+            except LevitonAuthError as err:
+                LOGGER.warning("Token expired during reconnection: %s", err)
+                raise ConfigEntryAuthFailed(err) from err
+            except LevitonConnectionError:
+                LOGGER.debug(
+                    "API unreachable during reconnection attempt %d", attempt
+                )
+                continue
+
+            try:
+                await self._connect_websocket()
+                if self.ws is not None:
+                    LOGGER.info("WebSocket reconnected successfully")
+                    return
+            except Exception:
+                LOGGER.debug("WebSocket reconnection attempt %d failed", attempt)
+        LOGGER.warning(
+            "WebSocket reconnection failed after %d attempts, "
+            "using REST polling (10-min interval)",
+            len(delays),
+        )
+
     async def async_shutdown(self) -> None:
         """Clean up WebSocket and bandwidth settings."""
+        # Clean up scheduled tasks
+        if self._midnight_unsub:
+            self._midnight_unsub()
         # Clean up notification callbacks
         if self._ws_remove_notification:
             self._ws_remove_notification()
         if self._ws_remove_disconnect:
             self._ws_remove_disconnect()
 
-        # Disable DAU bandwidth
+        # Disable bandwidth on all hubs
         for panel_id in self.data.panels:
             try:
                 await self.client.set_panel_bandwidth(panel_id, enabled=False)
             except LevitonConnectionError:
                 LOGGER.debug(
                     "Failed to disable bandwidth for panel %s", panel_id
+                )
+        for whem_id in self.data.whems:
+            try:
+                await self.client.set_whem_bandwidth(whem_id, bandwidth=0)
+            except LevitonConnectionError:
+                LOGGER.debug(
+                    "Failed to disable bandwidth for WHEM %s", whem_id
                 )
 
         # Disconnect WebSocket

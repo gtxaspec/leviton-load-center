@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from aiolevtion import LevitonAuthError, LevitonClient, LevitonConnectionError
+from aioleviton import (
+    LevitonAuthError,
+    LevitonClient,
+    LevitonConnectionError,
+    LevitonTwoFactorRequired,
+)
 
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
@@ -10,7 +15,12 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntry
 
+from aioleviton import enable_debug_logging as _enable_aioleviton_debug
+
+from .const import CONF_TOKEN, CONF_USER_ID, LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator, LevitonRuntimeData
+
+_enable_aioleviton_debug()
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -27,15 +37,41 @@ async def async_setup_entry(
     session = async_get_clientsession(hass)
     client = LevitonClient(session)
 
-    try:
-        await client.login(
-            entry.data[CONF_EMAIL],
-            entry.data[CONF_PASSWORD],
+    authenticated = False
+
+    # Try stored token first (avoids 2FA prompt on every restart)
+    if CONF_TOKEN in entry.data and CONF_USER_ID in entry.data:
+        client.restore_session(entry.data[CONF_TOKEN], entry.data[CONF_USER_ID])
+        try:
+            await client.get_permissions()
+            authenticated = True
+        except LevitonAuthError:
+            LOGGER.debug("Stored token expired, falling back to login")
+            client.restore_session("", "")
+        except LevitonConnectionError as err:
+            raise ConfigEntryNotReady(err) from err
+
+    # Fall back to email/password login
+    if not authenticated:
+        try:
+            await client.login(
+                entry.data[CONF_EMAIL],
+                entry.data[CONF_PASSWORD],
+            )
+        except (LevitonAuthError, LevitonTwoFactorRequired) as err:
+            raise ConfigEntryAuthFailed(err) from err
+        except LevitonConnectionError as err:
+            raise ConfigEntryNotReady(err) from err
+
+        # Update stored token for next restart
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                CONF_TOKEN: client.token,
+                CONF_USER_ID: client.user_id,
+            },
         )
-    except LevitonAuthError as err:
-        raise ConfigEntryAuthFailed(err) from err
-    except LevitonConnectionError as err:
-        raise ConfigEntryNotReady(err) from err
 
     coordinator = LevitonCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
