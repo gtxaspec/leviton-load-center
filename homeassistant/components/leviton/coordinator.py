@@ -23,6 +23,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -90,6 +91,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         await self._discover_devices()
         await self._connect_websocket()
         await self._load_daily_baselines()
+        self._check_firmware_updates()
         self._midnight_unsub = async_track_time_change(
             self.hass, self._handle_midnight, hour=0, minute=0, second=0
         )
@@ -336,6 +338,51 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             return parts >= (2, 0, 0)
         except (ValueError, AttributeError):
             return True  # Assume newest FW if unparseable
+
+    @callback
+    def _check_firmware_updates(self) -> None:
+        """Create or clear repair issues for available firmware updates."""
+        for whem_id, whem in self.data.whems.items():
+            issue_id = f"firmware_update_{whem_id}"
+            downloaded = whem.raw.get("downloaded")
+            if downloaded and downloaded != whem.version:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key="firmware_update_available",
+                    translation_placeholders={
+                        "device_name": whem.name or f"LWHEM {whem_id}",
+                        "current_version": whem.version or "unknown",
+                        "new_version": downloaded,
+                    },
+                    learn_more_url="https://www.leviton.com/support",
+                )
+            else:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+        for panel_id, panel in self.data.panels.items():
+            issue_id = f"firmware_update_{panel_id}"
+            update_avail = panel.raw.get("updateAvailability")
+            if update_avail and update_avail != "UP_TO_DATE":
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key="firmware_update_available",
+                    translation_placeholders={
+                        "device_name": panel.name or f"Panel {panel_id}",
+                        "current_version": panel.package_ver or "unknown",
+                        "new_version": panel.raw.get("updateVersion", "available"),
+                    },
+                    learn_more_url="https://www.leviton.com/support",
+                )
+            else:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     @callback
     def _handle_ws_notification(self, notification: dict[str, Any]) -> None:

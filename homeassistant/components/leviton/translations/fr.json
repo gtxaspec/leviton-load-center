@@ -223,6 +223,12 @@
       }
     }
   },
+  "issues": {
+    "firmware_update_available": {
+      "title": "Mise à jour micrologiciel disponible pour {device_name}",
+      "description": "{device_name} exécute le micrologiciel {current_version} et la version {new_version} est disponible. Mettez à jour le micrologiciel via l'app My Leviton."
+    }
+  },
   "exceptions": {
     "cannot_connect": {
       "message": "\u00c9chec de la connexion au service cloud Leviton"

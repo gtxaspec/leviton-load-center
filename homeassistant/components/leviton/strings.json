@@ -223,6 +223,12 @@
       }
     }
   },
+  "issues": {
+    "firmware_update_available": {
+      "title": "Firmware update available for {device_name}",
+      "description": "{device_name} is running firmware {current_version} and version {new_version} is available. Update the firmware using the My Leviton app."
+    }
+  },
   "exceptions": {
     "cannot_connect": {
       "message": "Failed to connect to the Leviton cloud service"

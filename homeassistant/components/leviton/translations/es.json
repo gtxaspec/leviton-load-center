@@ -223,6 +223,12 @@
       }
     }
   },
+  "issues": {
+    "firmware_update_available": {
+      "title": "Actualización de firmware disponible para {device_name}",
+      "description": "{device_name} está ejecutando firmware {current_version} y la versión {new_version} está disponible. Actualice el firmware usando la app My Leviton."
+    }
+  },
   "exceptions": {
     "cannot_connect": {
       "message": "No se pudo conectar al servicio en la nube de Leviton"
