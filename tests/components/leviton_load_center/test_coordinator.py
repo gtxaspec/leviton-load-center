@@ -567,6 +567,244 @@ async def test_async_update_data_rest_poll_refreshes(hass, mock_client) -> None:
     assert result.panels[panel.id].rms_voltage == 119
 
 
+# --- Energy accumulation tests ---
+
+
+def test_accumulate_breaker_energy_adds_delta() -> None:
+    """Test WS energy deltas are accumulated onto current lifetime."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 3400.0
+    breaker.energy_consumption_2 = 100.0
+    breaker.energy_import = 50.0
+
+    ws_data = {
+        "id": breaker.id,
+        "energyConsumption": 0.5,
+        "energyConsumption2": 0.1,
+        "energyImport": 0.02,
+        "power": 120,
+    }
+
+    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+
+    assert ws_data["energyConsumption"] == 3400.5
+    assert ws_data["energyConsumption2"] == 100.1
+    assert ws_data["energyImport"] == 50.02
+    # Non-energy fields should be unchanged
+    assert ws_data["power"] == 120
+
+
+def test_accumulate_breaker_energy_none_current() -> None:
+    """Test accumulation when current energy is None (treats as 0)."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = None
+
+    ws_data = {"energyConsumption": 0.5}
+
+    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+
+    assert ws_data["energyConsumption"] == 0.5
+
+
+def test_accumulate_breaker_energy_no_energy_fields() -> None:
+    """Test accumulation with no energy fields in WS data is a no-op."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    original_energy = breaker.energy_consumption
+
+    ws_data = {"power": 120, "rmsCurrent": 1}
+
+    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+
+    # No energy fields modified
+    assert "energyConsumption" not in ws_data
+    assert breaker.energy_consumption == original_energy
+
+
+def test_accumulate_breaker_energy_lifetime_passthrough() -> None:
+    """Test WS value larger than current is treated as lifetime, not delta."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 3400.0
+
+    ws_data = {"energyConsumption": 3400.5}
+
+    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+
+    # Value exceeds current — left as-is (lifetime replacement)
+    assert ws_data["energyConsumption"] == 3400.5
+
+
+def test_accumulate_ct_energy_lifetime_passthrough() -> None:
+    """Test WS CT value larger than current is treated as lifetime."""
+    ct = deepcopy(MOCK_CT)
+    ct.energy_consumption = 5000.0
+
+    ws_data = {"energyConsumption": 5001.0}
+
+    LevitonCoordinator._accumulate_ct_energy(ws_data, ct)
+
+    assert ws_data["energyConsumption"] == 5001.0
+
+
+def test_accumulate_ct_energy_adds_delta() -> None:
+    """Test WS energy deltas are accumulated onto current CT lifetime."""
+    ct = deepcopy(MOCK_CT)
+    ct.energy_consumption = 5000.0
+    ct.energy_consumption_2 = 4500.0
+    ct.energy_import = 100.0
+    ct.energy_import_2 = 90.0
+
+    ws_data = {
+        "energyConsumption": 1.0,
+        "energyConsumption2": 0.5,
+        "energyImport": 0.1,
+        "energyImport2": 0.05,
+    }
+
+    LevitonCoordinator._accumulate_ct_energy(ws_data, ct)
+
+    assert ws_data["energyConsumption"] == 5001.0
+    assert ws_data["energyConsumption2"] == 4500.5
+    assert ws_data["energyImport"] == 100.1
+    assert ws_data["energyImport2"] == 90.05
+
+
+def test_ws_breaker_energy_accumulated_via_whem(hass, mock_client) -> None:
+    """Test WS breaker energy deltas are accumulated via IotWhem handler."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 3400.0
+    coordinator.data = LevitonData(
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
+        breakers={breaker.id: breaker},
+    )
+
+    notification = {
+        "modelName": "IotWhem",
+        "modelId": MOCK_WHEM.id,
+        "data": {
+            "ResidentialBreaker": [
+                {"id": breaker.id, "energyConsumption": 0.25}
+            ],
+        },
+    }
+
+    coordinator._handle_ws_notification(notification)
+
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.25
+
+
+def test_ws_breaker_energy_accumulated_direct(hass, mock_client) -> None:
+    """Test WS breaker energy deltas are accumulated via direct handler."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.energy_consumption = 1500.0
+    coordinator.data = LevitonData(
+        breakers={breaker.id: breaker},
+    )
+
+    notification = {
+        "modelName": "ResidentialBreaker",
+        "modelId": breaker.id,
+        "data": {"energyConsumption": 0.1},
+    }
+
+    coordinator._handle_ws_notification(notification)
+
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 1500.1
+
+
+def test_ws_ct_energy_accumulated(hass, mock_client) -> None:
+    """Test WS CT energy deltas are accumulated."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    ct = deepcopy(MOCK_CT)
+    ct.energy_consumption = 5000.0
+    coordinator.data = LevitonData(
+        cts={ct.id: ct},
+    )
+
+    notification = {
+        "modelName": "IotCt",
+        "modelId": ct.id,
+        "data": {"energyConsumption": 0.5},
+    }
+
+    coordinator._handle_ws_notification(notification)
+
+    assert coordinator.data.cts[ct.id].energy_consumption == 5000.5
+
+
+async def test_correct_energy_values_detects_deltas(hass, mock_client) -> None:
+    """Test energy correction detects REST deltas and corrects them."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 0.25  # REST returned a delta
+    coordinator.data = LevitonData(
+        breakers={breaker.id: breaker},
+    )
+
+    # Simulate cached lifetime from previous session
+    coordinator._lifetime_store = MagicMock()
+    coordinator._lifetime_store.async_load = AsyncMock(
+        return_value={breaker.id: 3400.0}
+    )
+    coordinator._lifetime_store.async_save = AsyncMock()
+
+    await coordinator._correct_energy_values()
+
+    # Should be corrected: cached + delta
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.25
+    coordinator._lifetime_store.async_save.assert_called_once()
+
+
+async def test_correct_energy_values_lifetime_passthrough(hass, mock_client) -> None:
+    """Test energy correction passes through actual lifetime values."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 3410.0  # REST returned lifetime
+    coordinator.data = LevitonData(
+        breakers={breaker.id: breaker},
+    )
+
+    # Cached value is lower (previous session)
+    coordinator._lifetime_store = MagicMock()
+    coordinator._lifetime_store.async_load = AsyncMock(
+        return_value={breaker.id: 3400.0}
+    )
+    coordinator._lifetime_store.async_save = AsyncMock()
+
+    await coordinator._correct_energy_values()
+
+    # Should be unchanged (REST value is lifetime, not delta)
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 3410.0
+
+
+async def test_correct_energy_values_first_run(hass, mock_client) -> None:
+    """Test energy correction on first run with no cached values."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 3400.0
+    coordinator.data = LevitonData(
+        breakers={breaker.id: breaker},
+    )
+
+    # No cached values
+    coordinator._lifetime_store = MagicMock()
+    coordinator._lifetime_store.async_load = AsyncMock(return_value=None)
+    coordinator._lifetime_store.async_save = AsyncMock()
+
+    await coordinator._correct_energy_values()
+
+    # Should be unchanged, and value cached
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.0
+    coordinator._lifetime_store.async_save.assert_called_once()
+
+
 async def test_discover_devices_breaker_fetch_failure(hass, mock_client) -> None:
     """Test graceful handling of breaker fetch failure within WHEM."""
     mock_client.get_whem_breakers = AsyncMock(

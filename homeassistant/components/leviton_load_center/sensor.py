@@ -88,6 +88,26 @@ class LevitonPanelSensorDescription(SensorEntityDescription):
 # --- Helper functions (must be defined before descriptions that use them) ---
 
 
+def _breaker_power(breaker: Breaker) -> int | None:
+    """Total power across all poles of a breaker."""
+    if breaker.power is None:
+        return None
+    if breaker.poles == 2:
+        return breaker.power + (breaker.power_2 or 0)
+    return breaker.power
+
+
+def _breaker_energy(breaker: Breaker) -> float | None:
+    """Total lifetime energy across all poles of a breaker."""
+    if breaker.energy_consumption is None:
+        return None
+    if breaker.poles == 2:
+        return round(
+            breaker.energy_consumption + (breaker.energy_consumption_2 or 0), 3
+        )
+    return breaker.energy_consumption
+
+
 def _breaker_leg(breaker: Breaker) -> str:
     """Determine which leg a breaker is on based on position."""
     if breaker.poles == 2:
@@ -115,7 +135,7 @@ def _calc_current(
     if not use_calc:
         return breaker.rms_current
 
-    power = breaker.power
+    power = _breaker_power(breaker)
     if power is None:
         return breaker.rms_current
 
@@ -225,13 +245,17 @@ def _panel_total_power(panel: Panel, data: LevitonData) -> int | None:
     found = False
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id == panel.id:
-            total += breaker.power or 0
+            total += _breaker_power(breaker) or 0
             found = True
     return total if found else None
 
 
 def _panel_total_current(panel: Panel, data: LevitonData) -> int | None:
-    """Sum breaker current for a DAU panel."""
+    """Sum breaker current for a DAU panel.
+
+    For 2-pole breakers, current is the same on both poles (series circuit),
+    so we only count pole 1 to avoid double-counting.
+    """
     total = 0
     found = False
     for breaker in data.breakers.values():
@@ -247,7 +271,7 @@ def _panel_total_energy(panel: Panel, data: LevitonData) -> float | None:
     found = False
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id == panel.id:
-            total += breaker.energy_consumption or 0
+            total += _breaker_energy(breaker) or 0
             found = True
     return total if found else None
 
@@ -259,7 +283,7 @@ def _panel_daily_energy(panel: Panel, data: LevitonData) -> float | None:
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id == panel.id:
             daily = LevitonCoordinator.calc_daily_energy(
-                breaker.id, breaker.energy_consumption, data
+                breaker.id, _breaker_energy(breaker), data
             )
             if daily is not None:
                 total += daily
@@ -341,7 +365,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda b, _d, _o: b.power,
+        value_fn=lambda b, _d, _o: _breaker_power(b),
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
     ),
     LevitonBreakerSensorDescription(
@@ -365,7 +389,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=lambda b, d, _o: LevitonCoordinator.calc_daily_energy(
-            b.id, b.energy_consumption, d
+            b.id, _breaker_energy(b), d
         ),
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
     ),
@@ -376,7 +400,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda b, _d, _o: b.energy_consumption,
+        value_fn=lambda b, _d, _o: _breaker_energy(b),
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
     ),
     LevitonBreakerSensorDescription(

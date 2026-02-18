@@ -71,9 +71,13 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
         breaker = self._data.breakers.get(self._device_id)
         if breaker is None:
             return None
-        # remoteOn=True means on, currentState="ManualON" also means on
-        if breaker.remote_on:
+        # WS never delivers currentState for remote commands, so
+        # remoteState is the source of truth for remotely-controlled breakers.
+        if breaker.remote_state == "RemoteON":
             return True
+        if breaker.remote_state == "RemoteOFF":
+            return False
+        # No remote command active — use physical state
         return breaker.current_state == "ManualON"
 
     async def async_turn_on(self, **kwargs: Any) -> None:
@@ -89,12 +93,17 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
                     "error": str(err),
                 },
             ) from err
-        await self.coordinator.async_request_refresh()
+        # Optimistic: Gen 2 remote on/off only changes remoteState,
+        # not currentState (physical handle position doesn't change).
+        breaker = self._data.breakers.get(self._device_id)
+        if breaker:
+            breaker.remote_state = "RemoteON"
+            self.coordinator.async_set_updated_data(self.coordinator.data)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off the breaker (trip)."""
+        """Turn off the breaker."""
         try:
-            await self.coordinator.client.trip_breaker(self._device_id)
+            await self.coordinator.client.turn_off_breaker(self._device_id)
         except LevitonConnectionError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -104,4 +113,9 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
                     "error": str(err),
                 },
             ) from err
-        await self.coordinator.async_request_refresh()
+        # Optimistic: Gen 2 remote on/off only changes remoteState,
+        # not currentState (physical handle position doesn't change).
+        breaker = self._data.breakers.get(self._device_id)
+        if breaker:
+            breaker.remote_state = "RemoteOFF"
+            self.coordinator.async_set_updated_data(self.coordinator.data)

@@ -85,16 +85,80 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self._baseline_store = Store[dict[str, float]](
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.daily_baselines"
         )
+        self._lifetime_store = Store[dict[str, float]](
+            hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.lifetime_energy"
+        )
 
     async def _async_setup(self) -> None:
         """Discover devices and connect WebSocket on first refresh."""
         await self._discover_devices()
+        await self._correct_energy_values()
         await self._connect_websocket()
         await self._load_daily_baselines()
         self._check_firmware_updates()
         self._midnight_unsub = async_track_time_change(
             self.hass, self._handle_midnight, hour=0, minute=0, second=0
         )
+
+    async def _correct_energy_values(self) -> None:
+        """Detect and correct delta energy values from the REST API.
+
+        When bandwidth=1 (streaming mode), the WHEM reports energyConsumption
+        as a period delta instead of the lifetime total. This can happen on
+        restart if the previous session left bandwidth=1 active.
+
+        We detect this by comparing REST values against cached lifetime values.
+        If the REST value is significantly smaller, it's a delta and we correct
+        it by adding it to the cached lifetime.
+        """
+        stored: dict[str, float] = await self._lifetime_store.async_load() or {}
+        changed = False
+
+        for breaker_id, breaker in self.data.breakers.items():
+            rest_val = breaker.energy_consumption
+            if rest_val is None:
+                continue
+            cached_val = stored.get(breaker_id)
+            if cached_val is not None and rest_val < cached_val * 0.5:
+                # REST returned a delta — correct to lifetime
+                corrected = round(cached_val + rest_val, 3)
+                LOGGER.debug(
+                    "Energy correction %s: REST=%s (delta), cached=%s, "
+                    "corrected=%s",
+                    breaker.name, rest_val, cached_val, corrected,
+                )
+                breaker.energy_consumption = corrected
+                stored[breaker_id] = corrected
+                changed = True
+            else:
+                # REST returned lifetime (or first run) — cache it
+                if cached_val is None or rest_val > cached_val:
+                    stored[breaker_id] = rest_val
+                    changed = True
+
+        for ct_id, ct in self.data.cts.items():
+            for attr, key_suffix in (
+                ("energy_consumption", ""),
+                ("energy_consumption_2", "_2"),
+                ("energy_import", "_import"),
+                ("energy_import_2", "_import_2"),
+            ):
+                rest_val = getattr(ct, attr)
+                if rest_val is None:
+                    continue
+                cache_key = f"ct_{ct_id}{key_suffix}"
+                cached_val = stored.get(cache_key)
+                if cached_val is not None and rest_val < cached_val * 0.5:
+                    corrected = round(cached_val + rest_val, 3)
+                    setattr(ct, attr, corrected)
+                    stored[cache_key] = corrected
+                    changed = True
+                elif cached_val is None or rest_val > cached_val:
+                    stored[cache_key] = rest_val
+                    changed = True
+
+        if changed:
+            await self._lifetime_store.async_save(stored)
 
     async def _load_daily_baselines(self) -> None:
         """Load daily baselines from storage, or snapshot current values."""
@@ -110,7 +174,10 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         """Record current lifetime energy as the daily baseline."""
         for breaker_id, breaker in self.data.breakers.items():
             if breaker.energy_consumption is not None:
-                self.data.daily_baselines[breaker_id] = breaker.energy_consumption
+                energy = breaker.energy_consumption
+                if breaker.poles == 2:
+                    energy += breaker.energy_consumption_2 or 0
+                self.data.daily_baselines[breaker_id] = round(energy, 3)
         for ct_id, ct in self.data.cts.items():
             ct_total = (ct.energy_consumption or 0) + (
                 ct.energy_consumption_2 or 0
@@ -121,7 +188,26 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         """Reset daily energy baselines at midnight and persist."""
         self._snapshot_daily_baselines()
         await self._baseline_store.async_save(self.data.daily_baselines)
+        await self._save_lifetime_energy()
         self.async_set_updated_data(self.data)
+
+    async def _save_lifetime_energy(self) -> None:
+        """Persist current lifetime energy values for delta detection."""
+        stored: dict[str, float] = {}
+        for breaker_id, breaker in self.data.breakers.items():
+            if breaker.energy_consumption is not None:
+                stored[breaker_id] = breaker.energy_consumption
+        for ct_id, ct in self.data.cts.items():
+            for attr, key_suffix in (
+                ("energy_consumption", ""),
+                ("energy_consumption_2", "_2"),
+                ("energy_import", "_import"),
+                ("energy_import_2", "_import_2"),
+            ):
+                val = getattr(ct, attr)
+                if val is not None:
+                    stored[f"ct_{ct_id}{key_suffix}"] = val
+        await self._lifetime_store.async_save(stored)
 
     @callback
     def _handle_midnight(self, _now: Any) -> None:
@@ -377,6 +463,53 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             else:
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
+    @staticmethod
+    def _accumulate_breaker_energy(
+        breaker_data: dict[str, Any], breaker: Breaker
+    ) -> None:
+        """Convert WS energy deltas to accumulated lifetime values.
+
+        The WS delivers energyConsumption as a delta (energy since last report),
+        not the lifetime total that the REST API returns. We accumulate deltas
+        onto the current lifetime value so sensors stay correct.
+
+        Safety: if the WS value exceeds the current lifetime, it cannot be a
+        delta and is treated as a lifetime replacement (left as-is).
+        """
+        for ws_key, attr in (
+            ("energyConsumption", "energy_consumption"),
+            ("energyConsumption2", "energy_consumption_2"),
+            ("energyImport", "energy_import"),
+        ):
+            delta = breaker_data.get(ws_key)
+            if delta is not None:
+                current = getattr(breaker, attr) or 0
+                if current > 0 and delta > current:
+                    continue
+                breaker_data[ws_key] = round(current + delta, 3)
+
+    @staticmethod
+    def _accumulate_ct_energy(
+        ct_data: dict[str, Any], ct: Ct
+    ) -> None:
+        """Convert WS energy deltas to accumulated lifetime values for CTs.
+
+        Safety: if the WS value exceeds the current lifetime, it cannot be a
+        delta and is treated as a lifetime replacement (left as-is).
+        """
+        for ws_key, attr in (
+            ("energyConsumption", "energy_consumption"),
+            ("energyConsumption2", "energy_consumption_2"),
+            ("energyImport", "energy_import"),
+            ("energyImport2", "energy_import_2"),
+        ):
+            delta = ct_data.get(ws_key)
+            if delta is not None:
+                current = getattr(ct, attr) or 0
+                if current > 0 and delta > current:
+                    continue
+                ct_data[ws_key] = round(current + delta, 3)
+
     @callback
     def _handle_ws_notification(self, notification: dict[str, Any]) -> None:
         """Process a WebSocket push notification."""
@@ -395,7 +528,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 for breaker_data in data["ResidentialBreaker"]:
                     breaker_id = breaker_data.get("id")
                     if breaker_id and breaker_id in self.data.breakers:
-                        self.data.breakers[breaker_id].update(breaker_data)
+                        breaker = self.data.breakers[breaker_id]
+                        self._accumulate_breaker_energy(breaker_data, breaker)
+                        if breaker_data.get("remoteTrip") and not breaker.can_remote_on:
+                            breaker_data.setdefault("currentState", "SoftwareTrip")
+                        breaker.update(breaker_data)
                         updated = True
 
             # Check for child CT updates
@@ -403,6 +540,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 for ct_data in data["IotCt"]:
                     ct_id = ct_data.get("id")
                     if ct_id and ct_id in self.data.cts:
+                        self._accumulate_ct_energy(ct_data, self.data.cts[ct_id])
                         self.data.cts[ct_id].update(ct_data)
                         updated = True
 
@@ -422,7 +560,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 for breaker_data in data["ResidentialBreaker"]:
                     breaker_id = breaker_data.get("id")
                     if breaker_id and breaker_id in self.data.breakers:
-                        self.data.breakers[breaker_id].update(breaker_data)
+                        breaker = self.data.breakers[breaker_id]
+                        self._accumulate_breaker_energy(breaker_data, breaker)
+                        if breaker_data.get("remoteTrip") and not breaker.can_remote_on:
+                            breaker_data.setdefault("currentState", "SoftwareTrip")
+                        breaker.update(breaker_data)
                         updated = True
 
             # Panel own property updates
@@ -436,12 +578,19 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         elif model_name == "ResidentialBreaker":
             breaker_id = str(model_id)
             if breaker_id in self.data.breakers:
-                self.data.breakers[breaker_id].update(data)
+                breaker = self.data.breakers[breaker_id]
+                self._accumulate_breaker_energy(data, breaker)
+                # Gen 1 breakers physically trip — synthesize currentState
+                # since WS never delivers it for remote commands.
+                if data.get("remoteTrip") and not breaker.can_remote_on:
+                    data.setdefault("currentState", "SoftwareTrip")
+                breaker.update(data)
                 updated = True
 
         elif model_name == "IotCt":
             ct_id = model_id
             if isinstance(ct_id, int) and ct_id in self.data.cts:
+                self._accumulate_ct_energy(data, self.data.cts[ct_id])
                 self.data.cts[ct_id].update(data)
                 updated = True
 

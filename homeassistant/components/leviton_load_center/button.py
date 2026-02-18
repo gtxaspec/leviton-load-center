@@ -92,7 +92,12 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
                     "error": str(err),
                 },
             ) from err
-        await self.coordinator.async_request_refresh()
+        # Optimistic update: WS never delivers currentState for remote
+        # commands, so set expected state immediately and notify all entities.
+        breaker = self._data.breakers.get(self._device_id)
+        if breaker:
+            breaker.current_state = "SoftwareTrip"
+            self.coordinator.async_set_updated_data(self.coordinator.data)
 
 
 class LevitonBreakerIdentifyButton(LevitonEntity, ButtonEntity):

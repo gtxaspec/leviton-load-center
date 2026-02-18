@@ -47,7 +47,6 @@ async def test_trip_button_press(mock_client) -> None:
     await button.async_press()
 
     mock_client.trip_breaker.assert_called_once_with(breaker.id)
-    coordinator.async_request_refresh.assert_called_once()
 
 
 async def test_breaker_identify_button_press(mock_client) -> None:

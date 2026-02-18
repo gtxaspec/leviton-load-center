@@ -7,6 +7,6 @@
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "quality_scale": "platinum",
-  "requirements": ["aioleviton==0.2.3"],
+  "requirements": ["aioleviton==0.2.5"],
   "version": "0.1.0"
 }

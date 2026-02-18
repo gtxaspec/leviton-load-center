@@ -21,17 +21,17 @@ def _make_switch(breaker, data, mock_client) -> LevitonBreakerSwitch:
     coordinator = MagicMock()
     coordinator.data = data
     coordinator.client = mock_client
-    coordinator.async_request_refresh = AsyncMock()
     dev_info = breaker_device_info(breaker.id, data)
-    return LevitonBreakerSwitch(
+    switch = LevitonBreakerSwitch(
         coordinator, BREAKER_SWITCH_DESCRIPTION, breaker.id, dev_info
     )
+    return switch
 
 
 def test_is_on_remote_on() -> None:
-    """Test switch is_on when remoteOn=True."""
+    """Test switch is_on when remoteState=RemoteON."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
-    breaker.remote_on = True
+    breaker.remote_state = "RemoteON"
     data = LevitonData(
         breakers={breaker.id: breaker},
         whems={MOCK_WHEM.id: MOCK_WHEM},
@@ -40,10 +40,23 @@ def test_is_on_remote_on() -> None:
     assert switch.is_on is True
 
 
-def test_is_on_manual_on() -> None:
-    """Test switch is_on when currentState=ManualON."""
+def test_is_on_remote_off() -> None:
+    """Test switch is_on returns False when remoteState=RemoteOFF."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
-    breaker.remote_on = False
+    breaker.remote_state = "RemoteOFF"
+    breaker.current_state = "ManualON"  # WS never updates currentState
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    switch = _make_switch(breaker, data, MagicMock())
+    assert switch.is_on is False
+
+
+def test_is_on_manual_on() -> None:
+    """Test switch is_on when no remote state and currentState=ManualON."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.remote_state = ""
     breaker.current_state = "ManualON"
     data = LevitonData(
         breakers={breaker.id: breaker},
@@ -53,11 +66,11 @@ def test_is_on_manual_on() -> None:
     assert switch.is_on is True
 
 
-def test_is_on_tripped() -> None:
-    """Test switch is_on returns False when tripped."""
+def test_is_on_manual_off() -> None:
+    """Test switch is_on returns False when no remote state and tripped."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
-    breaker.remote_on = False
-    breaker.current_state = "Tripped"
+    breaker.remote_state = ""
+    breaker.current_state = "ManualOFF"
     data = LevitonData(
         breakers={breaker.id: breaker},
         whems={MOCK_WHEM.id: MOCK_WHEM},
@@ -90,11 +103,10 @@ async def test_turn_on(mock_client) -> None:
     await switch.async_turn_on()
 
     mock_client.turn_on_breaker.assert_called_once_with(breaker.id)
-    switch.coordinator.async_request_refresh.assert_called_once()
 
 
 async def test_turn_off(mock_client) -> None:
-    """Test turning off a breaker calls trip_breaker."""
+    """Test turning off a breaker calls turn_off_breaker."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
     data = LevitonData(
         breakers={breaker.id: breaker},
@@ -104,8 +116,7 @@ async def test_turn_off(mock_client) -> None:
 
     await switch.async_turn_off()
 
-    mock_client.trip_breaker.assert_called_once_with(breaker.id)
-    switch.coordinator.async_request_refresh.assert_called_once()
+    mock_client.turn_off_breaker.assert_called_once_with(breaker.id)
 
 
 # --- Platform setup tests ---
