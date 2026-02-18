@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 from homeassistant.components.leviton_load_center.button import (
     IDENTIFY_BUTTON_DESCRIPTION,
     TRIP_BUTTON_DESCRIPTION,
-    LevitonBreakerIdentifyButton,
     LevitonTripButton,
     LevitonWhemIdentifyButton,
     async_setup_entry,
@@ -47,24 +46,6 @@ async def test_trip_button_press(mock_client) -> None:
     await button.async_press()
 
     mock_client.trip_breaker.assert_called_once_with(breaker.id)
-
-
-async def test_breaker_identify_button_press(mock_client) -> None:
-    """Test breaker identify button calls blink_led."""
-    breaker = deepcopy(MOCK_BREAKER_GEN1)
-    data = LevitonData(
-        breakers={breaker.id: breaker},
-        whems={MOCK_WHEM.id: MOCK_WHEM},
-    )
-    coordinator = _make_coordinator(data, mock_client)
-    dev_info = breaker_device_info(breaker.id, data)
-    button = LevitonBreakerIdentifyButton(
-        coordinator, IDENTIFY_BUTTON_DESCRIPTION, breaker.id, dev_info
-    )
-
-    await button.async_press()
-
-    mock_client.blink_led.assert_called_once_with(breaker.id)
 
 
 async def test_whem_identify_button_press(mock_client) -> None:
@@ -107,29 +88,6 @@ async def test_setup_trip_button_gen1_only() -> None:
     assert trip_buttons[0]._device_id == gen1.id
 
 
-async def test_setup_identify_button_all_smart() -> None:
-    """Test identify button is created for all smart breakers."""
-    gen1 = deepcopy(MOCK_BREAKER_GEN1)
-    gen2 = deepcopy(MOCK_BREAKER_GEN2)
-    data = LevitonData(
-        breakers={gen1.id: gen1, gen2.id: gen2},
-        whems={MOCK_WHEM.id: MOCK_WHEM},
-    )
-    coordinator = MagicMock()
-    coordinator.data = data
-    entry = MagicMock()
-    entry.options = {}
-    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
-
-    added_entities = []
-    await async_setup_entry(MagicMock(), entry, added_entities.extend)
-
-    identify_buttons = [
-        e for e in added_entities if isinstance(e, LevitonBreakerIdentifyButton)
-    ]
-    assert len(identify_buttons) == 2
-
-
 async def test_setup_whem_identify_button() -> None:
     """Test WHEM identify button is created for each WHEM."""
     whem = deepcopy(MOCK_WHEM)
@@ -148,6 +106,29 @@ async def test_setup_whem_identify_button() -> None:
     ]
     assert len(whem_buttons) == 1
     assert whem_buttons[0]._device_id == whem.id
+
+
+async def test_setup_no_breaker_identify_buttons() -> None:
+    """Test breaker identify is NOT created as a button (it's a switch now)."""
+    gen1 = deepcopy(MOCK_BREAKER_GEN1)
+    gen2 = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(
+        breakers={gen1.id: gen1, gen2.id: gen2},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    # Only trip button for gen1 + WHEM identify button, no breaker identify buttons
+    assert len(added_entities) == 2
+    assert isinstance(added_entities[0], LevitonTripButton)
+    assert isinstance(added_entities[1], LevitonWhemIdentifyButton)
 
 
 async def test_setup_read_only_creates_no_buttons() -> None:

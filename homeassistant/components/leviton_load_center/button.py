@@ -50,18 +50,6 @@ async def async_setup_entry(
                 )
             )
 
-        # LED identify button: all smart breakers
-        if breaker.is_smart:
-            dev_info = breaker_device_info(breaker_id, data)
-            entities.append(
-                LevitonBreakerIdentifyButton(
-                    coordinator,
-                    IDENTIFY_BUTTON_DESCRIPTION,
-                    breaker_id,
-                    dev_info,
-                )
-            )
-
     # WHEM identify button
     for whem_id in data.whems:
         dev_info = whem_device_info(whem_id, data)
@@ -98,26 +86,6 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
         if breaker:
             breaker.current_state = "SoftwareTrip"
             self.coordinator.async_set_updated_data(self.coordinator.data)
-
-
-class LevitonBreakerIdentifyButton(LevitonEntity, ButtonEntity):
-    """Button entity to blink a breaker LED."""
-
-    _attr_device_class = ButtonDeviceClass.IDENTIFY
-
-    async def async_press(self) -> None:
-        """Blink the breaker LED."""
-        try:
-            await self.coordinator.client.blink_led(self._device_id)
-        except LevitonConnectionError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="identify_failed",
-                translation_placeholders={
-                    "name": self.name or self._device_id,
-                    "error": str(err),
-                },
-            ) from err
 
 
 class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):

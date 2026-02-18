@@ -24,6 +24,11 @@ BREAKER_SWITCH_DESCRIPTION = EntityDescription(
     translation_key="breaker",
 )
 
+IDENTIFY_SWITCH_DESCRIPTION = EntityDescription(
+    key="identify",
+    translation_key="identify",
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -44,6 +49,15 @@ async def async_setup_entry(
             entities.append(
                 LevitonBreakerSwitch(
                     coordinator, BREAKER_SWITCH_DESCRIPTION, breaker_id, dev_info
+                )
+            )
+
+        # LED identify switch: all smart breakers
+        if breaker.is_smart:
+            dev_info = breaker_device_info(breaker_id, data)
+            entities.append(
+                LevitonBreakerIdentifySwitch(
+                    coordinator, IDENTIFY_SWITCH_DESCRIPTION, breaker_id, dev_info
                 )
             )
 
@@ -118,4 +132,52 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
         breaker = self._data.breakers.get(self._device_id)
         if breaker:
             breaker.remote_state = "RemoteOFF"
+            self.coordinator.async_set_updated_data(self.coordinator.data)
+
+
+class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
+    """Switch entity to toggle breaker LED identification."""
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the breaker LED is blinking."""
+        breaker = self._data.breakers.get(self._device_id)
+        if breaker is None:
+            return None
+        return breaker.blink_led
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Start blinking the breaker LED."""
+        try:
+            await self.coordinator.client.blink_led(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="identify_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err
+        breaker = self._data.breakers.get(self._device_id)
+        if breaker:
+            breaker.blink_led = True
+            self.coordinator.async_set_updated_data(self.coordinator.data)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Stop blinking the breaker LED."""
+        try:
+            await self.coordinator.client.stop_blink_led(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="identify_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err
+        breaker = self._data.breakers.get(self._device_id)
+        if breaker:
+            breaker.blink_led = False
             self.coordinator.async_set_updated_data(self.coordinator.data)

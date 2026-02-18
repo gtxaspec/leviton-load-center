@@ -207,6 +207,9 @@
     "switch": {
       "breaker": {
         "name": "Breaker"
+      },
+      "identify": {
+        "name": "Identify"
       }
     },
     "button": {

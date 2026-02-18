@@ -261,6 +261,7 @@ def mock_client() -> Generator[AsyncMock]:
         client.turn_on_breaker = AsyncMock()
         client.turn_off_breaker = AsyncMock()
         client.blink_led = AsyncMock()
+        client.stop_blink_led = AsyncMock()
         client.identify_whem = AsyncMock()
         client.set_panel_bandwidth = AsyncMock()
         client.set_whem_bandwidth = AsyncMock()
