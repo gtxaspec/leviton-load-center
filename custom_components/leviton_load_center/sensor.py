@@ -28,10 +28,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_CALCULATED_CURRENT,
-    CONF_HIDE_DUMMY,
     CONF_VOLTAGE_208,
     DEFAULT_CALCULATED_CURRENT,
-    DEFAULT_HIDE_DUMMY,
     DEFAULT_VOLTAGE_208,
     VOLTAGE_120,
     VOLTAGE_208,
@@ -43,6 +41,7 @@ from .entity import (
     breaker_device_info,
     ct_device_info,
     panel_device_info,
+    should_include_breaker,
     whem_device_info,
 )
 
@@ -58,7 +57,6 @@ class LevitonBreakerSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[Breaker, LevitonData, dict[str, Any]], Any]
     exists_fn: Callable[[Breaker], bool] = lambda _: True
-    enabled_default: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -66,7 +64,6 @@ class LevitonCtSensorDescription(SensorEntityDescription):
     """Describe a Leviton CT sensor."""
 
     value_fn: Callable[[Ct], Any]
-    enabled_default: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -74,7 +71,6 @@ class LevitonWhemSensorDescription(SensorEntityDescription):
     """Describe a Leviton WHEM sensor."""
 
     value_fn: Callable[[Whem, LevitonData], Any]
-    enabled_default: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -82,7 +78,6 @@ class LevitonPanelSensorDescription(SensorEntityDescription):
     """Describe a Leviton DAU panel sensor."""
 
     value_fn: Callable[[Panel, LevitonData], Any]
-    enabled_default: bool = True
 
 
 # --- Helper functions (must be defined before descriptions that use them) ---
@@ -123,7 +118,6 @@ def _breaker_protect_fw(breaker: Breaker) -> str | None:
         breaker.firmware_version_silabs
         or breaker.firmware_version_gfci
         or breaker.firmware_version_afci
-        or None
     )
 
 
@@ -191,7 +185,7 @@ def _whem_total_energy(whem: Whem, data: LevitonData) -> float | None:
                 ct.energy_consumption_2 or 0
             )
             found = True
-    return total if found else None
+    return round(total, 3) if found else None
 
 
 def _whem_daily_energy(whem: Whem, data: LevitonData) -> float | None:
@@ -214,6 +208,12 @@ def _whem_daily_energy(whem: Whem, data: LevitonData) -> float | None:
 def _whem_voltage(whem: Whem, data: LevitonData) -> float | None:
     """Average non-None voltage legs for a WHEM hub."""
     vals = [v for v in (whem.rms_voltage_a, whem.rms_voltage_b) if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def _whem_frequency(whem: Whem, data: LevitonData) -> float | None:
+    """Average non-None frequency legs for a WHEM hub."""
+    vals = [v for v in (whem.frequency_a, whem.frequency_b) if v is not None]
     return sum(vals) / len(vals) if vals else None
 
 
@@ -273,7 +273,7 @@ def _panel_total_energy(panel: Panel, data: LevitonData) -> float | None:
         if breaker.residential_breaker_panel_id == panel.id:
             total += _breaker_energy(breaker) or 0
             found = True
-    return total if found else None
+    return round(total, 3) if found else None
 
 
 def _panel_daily_energy(panel: Panel, data: LevitonData) -> float | None:
@@ -326,6 +326,16 @@ def _panel_leg_current(
     return total if found else None
 
 
+def _panel_frequency_avg(panel: Panel, data: LevitonData) -> float | None:
+    """Average frequency across both legs of a DAU panel."""
+    vals = [
+        v
+        for v in (_panel_frequency(panel, data, 1), _panel_frequency(panel, data, 2))
+        if v is not None
+    ]
+    return sum(vals) / len(vals) if vals else None
+
+
 def _panel_frequency(
     panel: Panel, data: LevitonData, leg: int
 ) -> float | None:
@@ -342,18 +352,6 @@ def _panel_frequency(
             if breaker.line_frequency is not None:
                 return breaker.line_frequency
     return None
-
-
-def _should_include_breaker(
-    breaker: Breaker, options: dict[str, Any]
-) -> bool:
-    """Determine if a breaker should have entities created."""
-    if breaker.is_lsbma:
-        return False
-    hide_dummy = options.get(CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY)
-    if hide_dummy and breaker.is_placeholder and not breaker.has_lsbma:
-        return False
-    return True
 
 
 # --- Breaker sensor descriptions ---
@@ -386,7 +384,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=lambda b, d, _o: LevitonCoordinator.calc_daily_energy(
             b.id, _breaker_energy(b), d
@@ -414,14 +411,12 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         translation_key="operational_status",
         value_fn=lambda b, _d, _o: b.operational_state,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="remote_status",
         translation_key="remote_status",
         value_fn=lambda b, _d, _o: b.remote_state,
         exists_fn=lambda b: b.is_gen2,
-        enabled_default=True,
     ),
     # Diagnostics
     LevitonBreakerSensorDescription(
@@ -430,7 +425,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: b.current_rating,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="ble_mac",
@@ -438,7 +432,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: format_mac(b.id) if b.is_smart else None,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="ble_rssi",
@@ -449,7 +442,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: b.ble_rssi,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="firmware_ble",
@@ -457,7 +449,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: b.firmware_version_ble,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="firmware_meter",
@@ -465,7 +456,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: b.firmware_version_meter,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="firmware_protect",
@@ -473,7 +463,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: _breaker_protect_fw(b),
         exists_fn=lambda b: b.is_smart and bool(_breaker_protect_fw(b)),
-        enabled_default=True,
     ),
     LevitonBreakerSensorDescription(
         key="leg",
@@ -499,7 +488,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: b.serial_number,
         exists_fn=lambda b: b.is_smart,
-        enabled_default=True,
     ),
 )
 
@@ -528,8 +516,8 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda c: (
-            (c.energy_consumption or 0) + (c.energy_consumption_2 or 0)
+        value_fn=lambda c: round(
+            (c.energy_consumption or 0) + (c.energy_consumption_2 or 0), 3
         ),
     ),
     # Diagnostics
@@ -541,7 +529,6 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c: c.rms_current,
-        enabled_default=True,
     ),
     LevitonCtSensorDescription(
         key="current_leg2",
@@ -551,7 +538,6 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c: c.rms_current_2,
-        enabled_default=True,
     ),
     LevitonCtSensorDescription(
         key="power_leg1",
@@ -561,7 +547,6 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c: c.active_power,
-        enabled_default=True,
     ),
     LevitonCtSensorDescription(
         key="power_leg2",
@@ -571,7 +556,6 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c: c.active_power_2,
-        enabled_default=True,
     ),
     LevitonCtSensorDescription(
         key="lifetime_energy_import",
@@ -580,17 +564,15 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: (
-            (c.energy_import or 0) + (c.energy_import_2 or 0)
+        value_fn=lambda c: round(
+            (c.energy_import or 0) + (c.energy_import_2 or 0), 3
         ),
-        enabled_default=True,
     ),
     LevitonCtSensorDescription(
         key="usage_type",
         translation_key="usage_type",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c: c.usage_type,
-        enabled_default=True,
     ),
 )
 
@@ -618,7 +600,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=_whem_daily_energy,
     ),
@@ -637,7 +618,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, _d: w.rms_voltage_a,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="voltage_leg2",
@@ -646,7 +626,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, _d: w.rms_voltage_b,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="frequency",
@@ -654,7 +633,7 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         device_class=SensorDeviceClass.FREQUENCY,
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda w, _d: w.frequency_a,
+        value_fn=_whem_frequency,
     ),
     LevitonWhemSensorDescription(
         key="frequency_leg1",
@@ -663,7 +642,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, _d: w.frequency_a,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="frequency_leg2",
@@ -672,7 +650,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, _d: w.frequency_b,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="power_leg1",
@@ -681,7 +658,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, d: _whem_leg_power(w, d, 1),
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="power_leg2",
@@ -690,7 +666,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, d: _whem_leg_power(w, d, 2),
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="current_leg1",
@@ -699,7 +674,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, d: _whem_leg_current(w, d, 1),
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="current_leg2",
@@ -708,7 +682,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda w, d: _whem_leg_current(w, d, 2),
-        enabled_default=True,
     ),
     # Diagnostics
     LevitonWhemSensorDescription(
@@ -716,21 +689,18 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         translation_key="firmware_ble",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: w.version_ble,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="firmware_main",
         translation_key="firmware_main",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: w.version,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="ip_address",
         translation_key="ip_address",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: w.local_ip,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="lifetime_energy",
@@ -740,28 +710,24 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=_whem_total_energy,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="mac_address",
         translation_key="mac_address",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: format_mac(w.mac) if w.mac else None,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="residence_id",
         translation_key="residence_id",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: w.residence_id,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="serial_number",
         translation_key="serial_number",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: w.serial,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="wifi_rssi",
@@ -771,7 +737,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda w, _d: w.rssi,
-        enabled_default=True,
     ),
     LevitonWhemSensorDescription(
         key="firmware_update",
@@ -782,7 +747,6 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
             if w.raw.get("downloaded") and w.raw.get("downloaded") != w.version
             else "Up to date"
         ),
-        enabled_default=True,
     ),
 )
 
@@ -810,7 +774,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=_panel_daily_energy,
     ),
@@ -829,7 +792,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, _d: p.rms_voltage,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="voltage_leg2",
@@ -838,7 +800,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, _d: p.rms_voltage_2,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="current_leg1",
@@ -847,7 +808,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, d: _panel_leg_current(p, d, 1),
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="current_leg2",
@@ -856,7 +816,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, d: _panel_leg_current(p, d, 2),
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="power_leg1",
@@ -865,7 +824,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, d: _panel_leg_power(p, d, 1),
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="power_leg2",
@@ -874,7 +832,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, d: _panel_leg_power(p, d, 2),
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="frequency",
@@ -882,7 +839,7 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         device_class=SensorDeviceClass.FREQUENCY,
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda p, d: _panel_frequency(p, d, 1),
+        value_fn=_panel_frequency_avg,
     ),
     LevitonPanelSensorDescription(
         key="frequency_leg1",
@@ -891,7 +848,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, d: _panel_frequency(p, d, 1),
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="frequency_leg2",
@@ -900,7 +856,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda p, d: _panel_frequency(p, d, 2),
-        enabled_default=True,
     ),
     # Diagnostics
     LevitonPanelSensorDescription(
@@ -908,35 +863,30 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         translation_key="firmware_bcm",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.version_bcm,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="firmware_bsm",
         translation_key="firmware_bsm",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.version_bsm,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="firmware_bsm_radio",
         translation_key="firmware_bsm_radio",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.version_bsm_radio,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="firmware_main",
         translation_key="firmware_main",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.package_ver,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="firmware_ncm",
         translation_key="firmware_ncm",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.version_ncm,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="lifetime_energy",
@@ -946,28 +896,24 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=_panel_total_energy,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="residence_id",
         translation_key="residence_id",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.residence_id,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="serial_number",
         translation_key="serial_number",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.id,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="wifi_mode",
         translation_key="wifi_mode",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.wifi_mode,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="wifi_rssi",
@@ -977,14 +923,12 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.wifi_rssi,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="wifi_ssid",
         translation_key="wifi_ssid",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda p, _d: p.wifi_ssid,
-        enabled_default=True,
     ),
     LevitonPanelSensorDescription(
         key="firmware_update",
@@ -996,7 +940,6 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
             and p.raw.get("updateAvailability") != "UP_TO_DATE"
             else "Up to date"
         ),
-        enabled_default=True,
     ),
 )
 
@@ -1017,7 +960,7 @@ async def async_setup_entry(
 
     # Breaker sensors
     for breaker_id, breaker in data.breakers.items():
-        if not _should_include_breaker(breaker, options):
+        if not should_include_breaker(breaker, options):
             continue
         dev_info = breaker_device_info(breaker_id, data)
         for desc in BREAKER_SENSORS:
@@ -1076,17 +1019,15 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         """Initialize the breaker sensor."""
         super().__init__(coordinator, description, breaker_id, device_info)
         self._options = options
-        if not description.enabled_default:
-            self._attr_entity_registry_enabled_default = False
 
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return None
         return self.entity_description.value_fn(
-            breaker, self._data, self._options
+            breaker, self.coordinator.data, self._options
         )
 
 
@@ -1095,23 +1036,10 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
 
     entity_description: LevitonCtSensorDescription
 
-    def __init__(
-        self,
-        coordinator: LevitonCoordinator,
-        description: LevitonCtSensorDescription,
-        ct_id: int,
-        device_info: DeviceInfo,
-    ) -> None:
-        """Initialize the CT sensor."""
-        super().__init__(coordinator, description, str(ct_id), device_info)
-        self._ct_id = ct_id
-        if not description.enabled_default:
-            self._attr_entity_registry_enabled_default = False
-
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
-        ct = self._data.cts.get(self._ct_id)
+        ct = self.coordinator.data.cts.get(self._device_id)
         if ct is None:
             return None
         return self.entity_description.value_fn(ct)
@@ -1122,25 +1050,13 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
 
     entity_description: LevitonWhemSensorDescription
 
-    def __init__(
-        self,
-        coordinator: LevitonCoordinator,
-        description: LevitonWhemSensorDescription,
-        whem_id: str,
-        device_info: DeviceInfo,
-    ) -> None:
-        """Initialize the WHEM sensor."""
-        super().__init__(coordinator, description, whem_id, device_info)
-        if not description.enabled_default:
-            self._attr_entity_registry_enabled_default = False
-
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
-        whem = self._data.whems.get(self._device_id)
+        whem = self.coordinator.data.whems.get(self._device_id)
         if whem is None:
             return None
-        return self.entity_description.value_fn(whem, self._data)
+        return self.entity_description.value_fn(whem, self.coordinator.data)
 
 
 class LevitonPanelSensor(LevitonEntity, SensorEntity):
@@ -1148,22 +1064,10 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
 
     entity_description: LevitonPanelSensorDescription
 
-    def __init__(
-        self,
-        coordinator: LevitonCoordinator,
-        description: LevitonPanelSensorDescription,
-        panel_id: str,
-        device_info: DeviceInfo,
-    ) -> None:
-        """Initialize the panel sensor."""
-        super().__init__(coordinator, description, panel_id, device_info)
-        if not description.enabled_default:
-            self._attr_entity_registry_enabled_default = False
-
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
-        panel = self._data.panels.get(self._device_id)
+        panel = self.coordinator.data.panels.get(self._device_id)
         if panel is None:
             return None
-        return self.entity_description.value_fn(panel, self._data)
+        return self.entity_description.value_fn(panel, self.coordinator.data)

@@ -78,7 +78,7 @@ async def test_diagnostics_output(hass) -> None:
         whems={whem.id: whem},
         panels={panel.id: panel},
         breakers={breaker.id: breaker},
-        cts={ct.id: ct},
+        cts={str(ct.id): ct},
     )
 
     coordinator = MagicMock()

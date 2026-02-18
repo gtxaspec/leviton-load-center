@@ -6,7 +6,6 @@ import logging
 
 DOMAIN = "leviton_load_center"
 LOGGER = logging.getLogger(__package__)
-LOGGER.setLevel(logging.DEBUG)
 
 CONF_TOKEN = "token"
 CONF_USER_ID = "user_id"

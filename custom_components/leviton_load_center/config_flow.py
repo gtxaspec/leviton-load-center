@@ -67,7 +67,9 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_try_2fa_login(self, code: str) -> dict[str, str]:
         """Attempt 2FA login using the existing client, return errors dict."""
         errors: dict[str, str] = {}
-        assert self._client is not None
+        if self._client is None:
+            errors["base"] = "unknown"
+            return errors
         try:
             await self._client.login(self._email, self._password, code=code)
         except LevitonInvalidCode as err:

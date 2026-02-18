@@ -10,6 +10,9 @@ import pytest
 from aioleviton import Breaker, Ct, Whem
 
 from homeassistant.components.leviton_load_center.coordinator import LevitonData
+from homeassistant.components.leviton_load_center.entity import (
+    should_include_breaker,
+)
 from homeassistant.components.leviton_load_center.sensor import (
     BREAKER_SENSORS,
     CT_SENSORS,
@@ -25,7 +28,6 @@ from homeassistant.components.leviton_load_center.sensor import (
     _panel_total_current,
     _panel_total_energy,
     _panel_total_power,
-    _should_include_breaker,
     _whem_daily_energy,
     _whem_leg_current,
     _whem_leg_power,
@@ -171,7 +173,7 @@ def test_whem_total_power() -> None:
     """Test WHEM total power sums CT active_power values."""
     whem = deepcopy(MOCK_WHEM)
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct})
+    data = LevitonData(cts={str(ct.id): ct})
     result = _whem_total_power(whem, data)
     # active_power=196 + active_power_2=153 = 349
     assert result == 349
@@ -189,7 +191,7 @@ def test_whem_total_current() -> None:
     """Test WHEM total current sums CT rms_current values."""
     whem = deepcopy(MOCK_WHEM)
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct})
+    data = LevitonData(cts={str(ct.id): ct})
     result = _whem_total_current(whem, data)
     # rms_current=8 + rms_current_2=6 = 14
     assert result == 14
@@ -199,7 +201,7 @@ def test_whem_total_energy() -> None:
     """Test WHEM total energy sums CT energy values."""
     whem = deepcopy(MOCK_WHEM)
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct})
+    data = LevitonData(cts={str(ct.id): ct})
     result = _whem_total_energy(whem, data)
     # 5000.0 + 4500.0 = 9500.0
     assert result == 9500.0
@@ -209,7 +211,7 @@ def test_whem_leg_power() -> None:
     """Test WHEM leg power returns correct leg value."""
     whem = deepcopy(MOCK_WHEM)
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct})
+    data = LevitonData(cts={str(ct.id): ct})
     assert _whem_leg_power(whem, data, 1) == 196
     assert _whem_leg_power(whem, data, 2) == 153
 
@@ -218,7 +220,7 @@ def test_whem_leg_current() -> None:
     """Test WHEM leg current returns correct leg value."""
     whem = deepcopy(MOCK_WHEM)
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct})
+    data = LevitonData(cts={str(ct.id): ct})
     assert _whem_leg_current(whem, data, 1) == 8
     assert _whem_leg_current(whem, data, 2) == 6
 
@@ -267,14 +269,14 @@ def test_panel_total_energy() -> None:
 def test_should_include_smart_breaker() -> None:
     """Test smart breaker is included."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
-    assert _should_include_breaker(breaker, {}) is True
+    assert should_include_breaker(breaker, {}) is True
 
 
 def test_should_exclude_lsbma() -> None:
     """Test LSBMA breaker is excluded."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.model = "LSBMA"
-    assert _should_include_breaker(breaker, {}) is False
+    assert should_include_breaker(breaker, {}) is False
 
 
 def test_should_exclude_dummy_when_hide_enabled() -> None:
@@ -283,7 +285,7 @@ def test_should_exclude_dummy_when_hide_enabled() -> None:
     breaker.model = "NONE-1"
     breaker.lsbma_id = None
     options = {"hide_dummy": True}
-    assert _should_include_breaker(breaker, options) is False
+    assert should_include_breaker(breaker, options) is False
 
 
 def test_should_include_dummy_with_lsbma() -> None:
@@ -292,7 +294,7 @@ def test_should_include_dummy_with_lsbma() -> None:
     breaker.model = "NONE-1"
     breaker.lsbma_id = "some_lsbma"
     options = {"hide_dummy": True}
-    assert _should_include_breaker(breaker, options) is True
+    assert should_include_breaker(breaker, options) is True
 
 
 def test_should_include_dummy_when_hide_disabled() -> None:
@@ -301,7 +303,7 @@ def test_should_include_dummy_when_hide_disabled() -> None:
     breaker.model = "NONE-1"
     breaker.lsbma_id = None
     options = {"hide_dummy": False}
-    assert _should_include_breaker(breaker, options) is True
+    assert should_include_breaker(breaker, options) is True
 
 
 # --- Voltage averaging tests ---
@@ -450,7 +452,7 @@ def test_whem_daily_energy_with_baselines() -> None:
     ct = deepcopy(MOCK_CT)
     # ct total = 5000 + 4500 = 9500, baseline = 9000 → daily = 500
     data = LevitonData(
-        cts={ct.id: ct},
+        cts={str(ct.id): ct},
         daily_baselines={f"ct_{ct.id}": 9000.0},
     )
     result = _whem_daily_energy(whem, data)
@@ -463,7 +465,7 @@ def test_whem_daily_energy_negative_clamped_to_zero() -> None:
     ct = deepcopy(MOCK_CT)
     # ct total = 5000 + 4500 = 9500, baseline = 10000 → negative → clamped to 0
     data = LevitonData(
-        cts={ct.id: ct},
+        cts={str(ct.id): ct},
         daily_baselines={f"ct_{ct.id}": 10000.0},
     )
     result = _whem_daily_energy(whem, data)
@@ -474,7 +476,7 @@ def test_whem_daily_energy_no_baselines() -> None:
     """Test WHEM daily energy returns None when no baselines exist."""
     whem = deepcopy(MOCK_WHEM)
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct}, daily_baselines={})
+    data = LevitonData(cts={str(ct.id): ct}, daily_baselines={})
     result = _whem_daily_energy(whem, data)
     assert result is None
 
@@ -485,7 +487,7 @@ def test_whem_daily_energy_no_matching_cts() -> None:
     ct = deepcopy(MOCK_CT)
     ct.iot_whem_id = "other_whem"
     data = LevitonData(
-        cts={ct.id: ct},
+        cts={str(ct.id): ct},
         daily_baselines={f"ct_{ct.id}": 9000.0},
     )
     result = _whem_daily_energy(whem, data)

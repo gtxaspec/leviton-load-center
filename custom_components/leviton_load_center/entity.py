@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from aioleviton import Breaker
+
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY, DOMAIN
 from .coordinator import LevitonCoordinator, LevitonData
 
 
@@ -37,17 +41,12 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
             return False
         d = self.coordinator.data
         did = self._device_id
-        if did in d.whems or did in d.panels or did in d.breakers:
-            return True
-        try:
-            return int(did) in d.cts
-        except ValueError:
-            return False
-
-    @property
-    def _data(self) -> LevitonData:
-        """Return the coordinator data."""
-        return self.coordinator.data
+        return (
+            did in d.whems
+            or did in d.panels
+            or did in d.breakers
+            or did in d.cts
+        )
 
 
 def whem_device_info(whem_id: str, data: LevitonData) -> DeviceInfo:
@@ -103,7 +102,7 @@ def breaker_device_info(breaker_id: str, data: LevitonData) -> DeviceInfo:
     )
 
 
-def ct_device_info(ct_id: int, data: LevitonData) -> DeviceInfo:
+def ct_device_info(ct_id: str, data: LevitonData) -> DeviceInfo:
     """Build DeviceInfo for a CT clamp."""
     ct = data.cts[ct_id]
     name = ct.name or f"CT Channel {ct.channel}"
@@ -119,3 +118,13 @@ def ct_device_info(ct_id: int, data: LevitonData) -> DeviceInfo:
         model="LWHEM CT",
         via_device=via_device,
     )
+
+
+def should_include_breaker(breaker: Breaker, options: dict[str, Any]) -> bool:
+    """Determine if a breaker should have entities created."""
+    if breaker.is_lsbma:
+        return False
+    hide_dummy = options.get(CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY)
+    if hide_dummy and breaker.is_placeholder and not breaker.has_lsbma:
+        return False
+    return True

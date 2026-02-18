@@ -60,7 +60,7 @@ class LevitonWhemConnectivity(LevitonEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Return True if the hub is connected."""
-        whem = self._data.whems.get(self._device_id)
+        whem = self.coordinator.data.whems.get(self._device_id)
         if whem is None:
             return None
         return whem.connected
@@ -74,7 +74,7 @@ class LevitonPanelConnectivity(LevitonEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Return True if the panel is online."""
-        panel = self._data.panels.get(self._device_id)
+        panel = self.coordinator.data.panels.get(self._device_id)
         if panel is None:
             return None
         return panel.is_online

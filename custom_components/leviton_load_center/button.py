@@ -12,7 +12,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
-from .entity import LevitonEntity, breaker_device_info, whem_device_info
+from .entity import (
+    LevitonEntity,
+    breaker_device_info,
+    should_include_breaker,
+    whem_device_info,
+)
 
 PARALLEL_UPDATES = 1
 
@@ -38,9 +43,12 @@ async def async_setup_entry(
 
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
+    options = dict(entry.options)
     entities: list[ButtonEntity] = []
 
     for breaker_id, breaker in data.breakers.items():
+        if not should_include_breaker(breaker, options):
+            continue
         # Trip button: Gen 1 only (Gen 2 uses switch turn_off instead)
         if breaker.is_smart and not breaker.can_remote_on:
             dev_info = breaker_device_info(breaker_id, data)
@@ -82,7 +90,7 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
             ) from err
         # Optimistic update: WS never delivers currentState for remote
         # commands, so set expected state immediately and notify all entities.
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker:
             breaker.current_state = "SoftwareTrip"
             self.coordinator.async_set_updated_data(self.coordinator.data)

@@ -128,10 +128,10 @@ def test_ct_device_info() -> None:
     """Test CT device info is built correctly."""
     ct = deepcopy(MOCK_CT)
     data = LevitonData(
-        cts={ct.id: ct},
+        cts={str(ct.id): ct},
         whems={MOCK_WHEM.id: MOCK_WHEM},
     )
-    info = ct_device_info(ct.id, data)
+    info = ct_device_info(str(ct.id), data)
 
     assert (DOMAIN, str(ct.id)) in info["identifiers"]
     assert info["name"] == f"CT Channel {ct.channel}"
@@ -145,10 +145,10 @@ def test_ct_device_info_with_name() -> None:
     ct = deepcopy(MOCK_CT)
     ct.name = "Grid Power"
     data = LevitonData(
-        cts={ct.id: ct},
+        cts={str(ct.id): ct},
         whems={MOCK_WHEM.id: MOCK_WHEM},
     )
-    info = ct_device_info(ct.id, data)
+    info = ct_device_info(str(ct.id), data)
     assert info["name"] == "Grid Power"
 
 
@@ -156,8 +156,8 @@ def test_ct_device_info_no_whem() -> None:
     """Test CT device info with no WHEM parent."""
     ct = deepcopy(MOCK_CT)
     ct.iot_whem_id = "nonexistent"
-    data = LevitonData(cts={ct.id: ct})
-    info = ct_device_info(ct.id, data)
+    data = LevitonData(cts={str(ct.id): ct})
+    info = ct_device_info(str(ct.id), data)
     assert info.get("via_device") is None
 
 
@@ -204,7 +204,7 @@ def test_entity_available_breaker_present() -> None:
 def test_entity_available_ct_present() -> None:
     """Test entity is available when numeric device_id is in cts."""
     ct = deepcopy(MOCK_CT)
-    data = LevitonData(cts={ct.id: ct})
+    data = LevitonData(cts={str(ct.id): ct})
     coordinator = MagicMock()
     coordinator.data = data
     coordinator.last_update_success = True

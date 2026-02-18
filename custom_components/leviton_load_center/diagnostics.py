@@ -44,7 +44,7 @@ async def async_get_config_entry_diagnostics(
             for breaker_id, breaker in data.breakers.items()
         },
         "cts": {
-            str(ct_id): ct.raw
+            ct_id: ct.raw
             for ct_id, ct in data.cts.items()
         },
     }

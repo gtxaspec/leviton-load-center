@@ -9,13 +9,12 @@ from aioleviton import LevitonConnectionError
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN
-from .coordinator import LevitonConfigEntry, LevitonCoordinator
-from .entity import LevitonEntity, breaker_device_info
+from .coordinator import LevitonConfigEntry
+from .entity import LevitonEntity, breaker_device_info, should_include_breaker
 
 PARALLEL_UPDATES = 1
 
@@ -41,9 +40,12 @@ async def async_setup_entry(
 
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
+    options = dict(entry.options)
     entities: list[SwitchEntity] = []
 
     for breaker_id, breaker in data.breakers.items():
+        if not should_include_breaker(breaker, options):
+            continue
         if breaker.can_remote_on:
             dev_info = breaker_device_info(breaker_id, data)
             entities.append(
@@ -69,20 +71,10 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
 
     _attr_device_class = SwitchDeviceClass.SWITCH
 
-    def __init__(
-        self,
-        coordinator: LevitonCoordinator,
-        description: EntityDescription,
-        breaker_id: str,
-        device_info: DeviceInfo,
-    ) -> None:
-        """Initialize the breaker switch."""
-        super().__init__(coordinator, description, breaker_id, device_info)
-
     @property
     def is_on(self) -> bool | None:
         """Return True if the breaker is on."""
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return None
         # WS never delivers currentState for remote commands, so
@@ -109,7 +101,7 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
             ) from err
         # Optimistic: Gen 2 remote on/off only changes remoteState,
         # not currentState (physical handle position doesn't change).
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker:
             breaker.remote_state = "RemoteON"
             self.coordinator.async_set_updated_data(self.coordinator.data)
@@ -129,7 +121,7 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
             ) from err
         # Optimistic: Gen 2 remote on/off only changes remoteState,
         # not currentState (physical handle position doesn't change).
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker:
             breaker.remote_state = "RemoteOFF"
             self.coordinator.async_set_updated_data(self.coordinator.data)
@@ -141,7 +133,7 @@ class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
     @property
     def is_on(self) -> bool | None:
         """Return True if the breaker LED is blinking."""
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return None
         return breaker.blink_led
@@ -159,7 +151,7 @@ class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
                     "error": str(err),
                 },
             ) from err
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker:
             breaker.blink_led = True
             self.coordinator.async_set_updated_data(self.coordinator.data)
@@ -177,7 +169,7 @@ class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
                     "error": str(err),
                 },
             ) from err
-        breaker = self._data.breakers.get(self._device_id)
+        breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker:
             breaker.blink_led = False
             self.coordinator.async_set_updated_data(self.coordinator.data)

@@ -15,12 +15,8 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntry
 
-from aioleviton import enable_debug_logging as _enable_aioleviton_debug
-
 from .const import CONF_TOKEN, CONF_USER_ID, LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator, LevitonRuntimeData
-
-_enable_aioleviton_debug()
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -82,15 +78,22 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    entry.async_on_unload(entry.add_update_listener(_async_update_options))
+
     return True
+
+
+async def _async_update_options(
+    hass: HomeAssistant, entry: LevitonConfigEntry
+) -> None:
+    """Reload the integration when options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(
     hass: HomeAssistant, entry: LevitonConfigEntry
 ) -> bool:
     """Unload a Leviton config entry."""
-    coordinator = entry.runtime_data.coordinator
-    await coordinator.async_shutdown()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
