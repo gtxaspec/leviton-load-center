@@ -92,6 +92,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self._lifetime_store = Store[dict[str, float]](
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.lifetime_energy"
         )
+        self._energy_high_water: dict[str, float] = {}
 
     async def _async_setup(self) -> None:
         """Discover devices and connect WebSocket on first refresh."""
@@ -222,6 +223,20 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 if val is not None:
                     stored[f"ct_{ct_id}{key_suffix}"] = val
         await self._lifetime_store.async_save(stored)
+
+    def clamp_increasing(self, key: str, value: float) -> float:
+        """Ensure a TOTAL_INCREASING value never decreases.
+
+        IEEE 754 float arithmetic can cause sums of independently-rounded
+        values to fluctuate by ±0.001.  This clamps to the high-water mark
+        so HA's recorder never sees a decrease.  Resets on restart (fresh
+        REST values have no accumulation rounding drift).
+        """
+        prev = self._energy_high_water.get(key)
+        if prev is not None and value < prev:
+            return prev
+        self._energy_high_water[key] = value
+        return value
 
     @staticmethod
     def calc_daily_energy(

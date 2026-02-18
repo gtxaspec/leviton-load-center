@@ -1030,9 +1030,12 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return None
-        return self.entity_description.value_fn(
+        value = self.entity_description.value_fn(
             breaker, self.coordinator.data, self._options
         )
+        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+            value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
+        return value
 
 
 class LevitonCtSensor(LevitonEntity, SensorEntity):
@@ -1047,7 +1050,10 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
         ct = self.coordinator.data.cts.get(self._device_id)
         if ct is None:
             return None
-        return self.entity_description.value_fn(ct)
+        value = self.entity_description.value_fn(ct)
+        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+            value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
+        return value
 
 
 class LevitonWhemSensor(LevitonEntity, SensorEntity):
@@ -1062,7 +1068,10 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
         whem = self.coordinator.data.whems.get(self._device_id)
         if whem is None:
             return None
-        return self.entity_description.value_fn(whem, self.coordinator.data)
+        value = self.entity_description.value_fn(whem, self.coordinator.data)
+        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+            value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
+        return value
 
 
 class LevitonPanelSensor(LevitonEntity, SensorEntity):
@@ -1077,4 +1086,7 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
         panel = self.coordinator.data.panels.get(self._device_id)
         if panel is None:
             return None
-        return self.entity_description.value_fn(panel, self.coordinator.data)
+        value = self.entity_description.value_fn(panel, self.coordinator.data)
+        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+            value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
+        return value
