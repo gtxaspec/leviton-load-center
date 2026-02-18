@@ -185,6 +185,7 @@ def test_entity_available_whem_present() -> None:
     description = MagicMock()
     description.key = "power"
     entity = LevitonEntity(coordinator, description, whem.id, MagicMock())
+    entity._collection = "whems"
     assert entity.available is True
 
 
@@ -211,6 +212,7 @@ def test_entity_available_ct_present() -> None:
     description = MagicMock()
     description.key = "power"
     entity = LevitonEntity(coordinator, description, str(ct.id), MagicMock())
+    entity._collection = "cts"
     assert entity.available is True
 
 
@@ -236,4 +238,5 @@ def test_entity_available_coordinator_unavailable() -> None:
     description = MagicMock()
     description.key = "power"
     entity = LevitonEntity(coordinator, description, whem.id, MagicMock())
+    entity._collection = "whems"
     assert entity.available is False

@@ -18,6 +18,7 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
     """Base class for Leviton entities."""
 
     _attr_has_entity_name = True
+    _collection: str = "breakers"
 
     def __init__(
         self,
@@ -39,13 +40,8 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
         """Return True if the entity's device is present in coordinator data."""
         if not super().available:
             return False
-        d = self.coordinator.data
-        did = self._device_id
-        return (
-            did in d.whems
-            or did in d.panels
-            or did in d.breakers
-            or did in d.cts
+        return self._device_id in getattr(
+            self.coordinator.data, self._collection
         )
 
 

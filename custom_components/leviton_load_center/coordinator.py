@@ -120,25 +120,28 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         changed = False
 
         for breaker_id, breaker in self.data.breakers.items():
-            rest_val = breaker.energy_consumption
-            if rest_val is None:
-                continue
-            cached_val = stored.get(breaker_id)
-            if cached_val is not None and rest_val < cached_val * 0.5:
-                # REST returned a delta — correct to lifetime
-                corrected = round(cached_val + rest_val, 3)
-                LOGGER.debug(
-                    "Energy correction %s: REST=%s (delta), cached=%s, "
-                    "corrected=%s",
-                    breaker.name, rest_val, cached_val, corrected,
-                )
-                breaker.energy_consumption = corrected
-                stored[breaker_id] = corrected
-                changed = True
-            else:
-                # REST returned lifetime (or first run) — cache it
-                if cached_val is None or rest_val > cached_val:
-                    stored[breaker_id] = rest_val
+            for attr, key_suffix in (
+                ("energy_consumption", ""),
+                ("energy_consumption_2", "_2"),
+                ("energy_import", "_import"),
+            ):
+                rest_val = getattr(breaker, attr)
+                if rest_val is None:
+                    continue
+                cache_key = f"{breaker_id}{key_suffix}"
+                cached_val = stored.get(cache_key)
+                if cached_val is not None and rest_val < cached_val * 0.5:
+                    corrected = round(cached_val + rest_val, 3)
+                    LOGGER.debug(
+                        "Energy correction %s/%s: REST=%s (delta), "
+                        "cached=%s, corrected=%s",
+                        breaker.name, attr, rest_val, cached_val, corrected,
+                    )
+                    setattr(breaker, attr, corrected)
+                    stored[cache_key] = corrected
+                    changed = True
+                elif cached_val is None or rest_val > cached_val:
+                    stored[cache_key] = rest_val
                     changed = True
 
         for ct_id, ct in self.data.cts.items():
@@ -187,7 +190,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             ct_total = (ct.energy_consumption or 0) + (
                 ct.energy_consumption_2 or 0
             )
-            self.data.daily_baselines[f"ct_{ct_id}"] = ct_total
+            self.data.daily_baselines[f"ct_{ct_id}"] = round(ct_total, 3)
 
     async def _async_handle_midnight(self, _now: Any) -> None:
         """Reset daily energy baselines at midnight and persist."""
@@ -200,8 +203,14 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         """Persist current lifetime energy values for delta detection."""
         stored: dict[str, float] = {}
         for breaker_id, breaker in self.data.breakers.items():
-            if breaker.energy_consumption is not None:
-                stored[breaker_id] = breaker.energy_consumption
+            for attr, key_suffix in (
+                ("energy_consumption", ""),
+                ("energy_consumption_2", "_2"),
+                ("energy_import", "_import"),
+            ):
+                val = getattr(breaker, attr)
+                if val is not None:
+                    stored[f"{breaker_id}{key_suffix}"] = val
         for ct_id, ct in self.data.cts.items():
             for attr, key_suffix in (
                 ("energy_consumption", ""),

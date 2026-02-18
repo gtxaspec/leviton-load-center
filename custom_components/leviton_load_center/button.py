@@ -100,6 +100,7 @@ class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
     """Button entity to blink the WHEM hub LED."""
 
     _attr_device_class = ButtonDeviceClass.IDENTIFY
+    _collection = "whems"
 
     async def async_press(self) -> None:
         """Blink the WHEM LED."""

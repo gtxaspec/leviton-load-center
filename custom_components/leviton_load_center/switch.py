@@ -46,22 +46,21 @@ async def async_setup_entry(
     for breaker_id, breaker in data.breakers.items():
         if not should_include_breaker(breaker, options):
             continue
+        if not breaker.is_smart:
+            continue
+        dev_info = breaker_device_info(breaker_id, data)
         if breaker.can_remote_on:
-            dev_info = breaker_device_info(breaker_id, data)
             entities.append(
                 LevitonBreakerSwitch(
                     coordinator, BREAKER_SWITCH_DESCRIPTION, breaker_id, dev_info
                 )
             )
-
         # LED identify switch: all smart breakers
-        if breaker.is_smart:
-            dev_info = breaker_device_info(breaker_id, data)
-            entities.append(
-                LevitonBreakerIdentifySwitch(
-                    coordinator, IDENTIFY_SWITCH_DESCRIPTION, breaker_id, dev_info
-                )
+        entities.append(
+            LevitonBreakerIdentifySwitch(
+                coordinator, IDENTIFY_SWITCH_DESCRIPTION, breaker_id, dev_info
             )
+        )
 
     async_add_entities(entities)
 

@@ -384,6 +384,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=lambda b, d, _o: LevitonCoordinator.calc_daily_energy(
             b.id, _breaker_energy(b), d
@@ -510,17 +511,18 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda c: (c.rms_current or 0) + (c.rms_current_2 or 0),
     ),
+    # Diagnostics
     LevitonCtSensorDescription(
         key="lifetime_energy",
         translation_key="lifetime_energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c: round(
             (c.energy_consumption or 0) + (c.energy_consumption_2 or 0), 3
         ),
     ),
-    # Diagnostics
     LevitonCtSensorDescription(
         key="current_leg1",
         translation_key="current_leg1",
@@ -600,6 +602,7 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=_whem_daily_energy,
     ),
@@ -774,6 +777,7 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=_panel_daily_energy,
     ),
@@ -1035,6 +1039,7 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
     """Sensor entity for a Leviton CT clamp."""
 
     entity_description: LevitonCtSensorDescription
+    _collection = "cts"
 
     @property
     def native_value(self) -> Any:
@@ -1049,6 +1054,7 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
     """Sensor entity for a Leviton WHEM hub."""
 
     entity_description: LevitonWhemSensorDescription
+    _collection = "whems"
 
     @property
     def native_value(self) -> Any:
@@ -1063,6 +1069,7 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
     """Sensor entity for a Leviton DAU panel."""
 
     entity_description: LevitonPanelSensorDescription
+    _collection = "panels"
 
     @property
     def native_value(self) -> Any:

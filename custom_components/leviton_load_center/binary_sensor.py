@@ -56,6 +56,7 @@ class LevitonWhemConnectivity(LevitonEntity, BinarySensorEntity):
     """Binary sensor for LWHEM hub connectivity."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _collection = "whems"
 
     @property
     def is_on(self) -> bool | None:
@@ -70,6 +71,7 @@ class LevitonPanelConnectivity(LevitonEntity, BinarySensorEntity):
     """Binary sensor for DAU panel connectivity."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _collection = "panels"
 
     @property
     def is_on(self) -> bool | None:
