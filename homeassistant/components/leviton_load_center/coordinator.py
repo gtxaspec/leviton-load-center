@@ -91,6 +91,18 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.lifetime_energy"
         )
 
+    @callback
+    def async_set_updated_data(self, data: LevitonData) -> None:
+        """Update data and notify listeners with clear log message."""
+        self._async_unsub_refresh()
+        self._debounced_refresh.async_cancel()
+        self.data = data
+        self.last_update_success = True
+        LOGGER.debug("WebSocket push update")
+        if self._listeners:
+            self._schedule_refresh()
+        self.async_update_listeners()
+
     async def _async_setup(self) -> None:
         """Discover devices and connect WebSocket on first refresh."""
         await self._discover_devices()
