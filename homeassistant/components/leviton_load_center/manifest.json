@@ -1,5 +1,5 @@
 {
-  "domain": "leviton",
+  "domain": "leviton_load_center",
   "name": "Leviton Load Center",
   "codeowners": ["@gtxaspec"],
   "config_flow": true,

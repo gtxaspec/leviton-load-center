@@ -5,9 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.components.leviton.coordinator import LevitonData, LevitonRuntimeData
-from homeassistant.components.leviton.entity import breaker_device_info
-from homeassistant.components.leviton.switch import (
+from homeassistant.components.leviton_load_center.coordinator import LevitonData, LevitonRuntimeData
+from homeassistant.components.leviton_load_center.entity import breaker_device_info
+from homeassistant.components.leviton_load_center.switch import (
     BREAKER_SWITCH_DESCRIPTION,
     LevitonBreakerSwitch,
     async_setup_entry,

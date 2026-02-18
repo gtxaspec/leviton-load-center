@@ -13,7 +13,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from homeassistant.components.leviton.const import DOMAIN
+from homeassistant.components.leviton_load_center.const import DOMAIN
 
 MOCK_EMAIL = "test@example.com"
 MOCK_PASSWORD = "testpassword123"
@@ -237,7 +237,7 @@ def mock_config_entry(hass: HomeAssistant) -> MockConfigEntry:
 def mock_client() -> Generator[AsyncMock]:
     """Return a mocked LevitonClient."""
     with patch(
-        "homeassistant.components.leviton.LevitonClient",
+        "homeassistant.components.leviton_load_center.LevitonClient",
         autospec=True,
     ) as mock_cls:
         client = mock_cls.return_value

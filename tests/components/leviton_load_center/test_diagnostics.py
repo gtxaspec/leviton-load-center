@@ -5,11 +5,11 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import MagicMock
 
-from homeassistant.components.leviton.coordinator import (
+from homeassistant.components.leviton_load_center.coordinator import (
     LevitonData,
     LevitonRuntimeData,
 )
-from homeassistant.components.leviton.diagnostics import (
+from homeassistant.components.leviton_load_center.diagnostics import (
     TO_REDACT_BREAKER,
     TO_REDACT_PANEL,
     TO_REDACT_WHEM,

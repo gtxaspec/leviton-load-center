@@ -15,7 +15,7 @@ from aioleviton import (
 )
 
 from homeassistant import config_entries
-from homeassistant.components.leviton.const import (
+from homeassistant.components.leviton_load_center.const import (
     CONF_CALCULATED_CURRENT,
     CONF_HIDE_DUMMY,
     CONF_READ_ONLY,
@@ -41,11 +41,11 @@ def mock_setup_entry() -> Generator[None]:
     """Prevent actual integration setup during config flow tests."""
     with (
         patch(
-            "homeassistant.components.leviton.async_setup_entry",
+            "homeassistant.components.leviton_load_center.async_setup_entry",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.leviton.async_unload_entry",
+            "homeassistant.components.leviton_load_center.async_unload_entry",
             return_value=True,
         ),
     ):
@@ -55,7 +55,7 @@ def mock_setup_entry() -> Generator[None]:
 async def test_user_flow_success(hass: HomeAssistant) -> None:
     """Test successful user config flow."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(return_value=MOCK_AUTH_TOKEN)
         mock_cls.return_value.token = MOCK_TOKEN
@@ -80,7 +80,7 @@ async def test_user_flow_success(hass: HomeAssistant) -> None:
 async def test_user_flow_invalid_auth(hass: HomeAssistant) -> None:
     """Test user flow with invalid credentials."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonAuthError("Invalid")
@@ -100,7 +100,7 @@ async def test_user_flow_invalid_auth(hass: HomeAssistant) -> None:
 async def test_user_flow_cannot_connect(hass: HomeAssistant) -> None:
     """Test user flow with connection error."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonConnectionError("Network error")
@@ -120,7 +120,7 @@ async def test_user_flow_cannot_connect(hass: HomeAssistant) -> None:
 async def test_user_flow_unknown_error(hass: HomeAssistant) -> None:
     """Test user flow with unknown error."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=RuntimeError("Unexpected")
@@ -140,7 +140,7 @@ async def test_user_flow_unknown_error(hass: HomeAssistant) -> None:
 async def test_user_flow_2fa_required(hass: HomeAssistant) -> None:
     """Test user flow triggers 2FA step."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -161,7 +161,7 @@ async def test_user_flow_2fa_required(hass: HomeAssistant) -> None:
 async def test_2fa_flow_success(hass: HomeAssistant) -> None:
     """Test successful 2FA flow."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.token = MOCK_TOKEN
@@ -193,7 +193,7 @@ async def test_2fa_flow_success(hass: HomeAssistant) -> None:
 async def test_2fa_flow_invalid_code(hass: HomeAssistant) -> None:
     """Test 2FA flow with invalid code."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -221,7 +221,7 @@ async def test_2fa_flow_invalid_code(hass: HomeAssistant) -> None:
 async def test_duplicate_entry(hass: HomeAssistant) -> None:
     """Test duplicate config entry is rejected."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(return_value=MOCK_AUTH_TOKEN)
         mock_cls.return_value.token = MOCK_TOKEN
@@ -252,7 +252,7 @@ async def test_duplicate_entry(hass: HomeAssistant) -> None:
 async def test_reauth_flow(hass: HomeAssistant) -> None:
     """Test reauthentication flow."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(return_value=MOCK_AUTH_TOKEN)
         mock_cls.return_value.token = MOCK_TOKEN
@@ -311,7 +311,7 @@ async def test_options_flow(hass: HomeAssistant) -> None:
 async def test_reauth_flow_invalid_auth(hass: HomeAssistant) -> None:
     """Test reauth flow shows error on invalid credentials."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonAuthError("Wrong password")
@@ -337,7 +337,7 @@ async def test_reauth_flow_invalid_auth(hass: HomeAssistant) -> None:
 async def test_reauth_flow_connection_error(hass: HomeAssistant) -> None:
     """Test reauth flow shows error on connection failure."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonConnectionError("Network down")
@@ -363,7 +363,7 @@ async def test_reauth_flow_connection_error(hass: HomeAssistant) -> None:
 async def test_reconfigure_flow(hass: HomeAssistant) -> None:
     """Test reconfigure flow."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(return_value=MOCK_AUTH_TOKEN)
         mock_cls.return_value.token = MOCK_TOKEN
@@ -392,7 +392,7 @@ async def test_reconfigure_flow(hass: HomeAssistant) -> None:
 async def test_reconfigure_flow_auth_error(hass: HomeAssistant) -> None:
     """Test reconfigure flow shows error on invalid credentials."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonAuthError("Bad creds")
@@ -418,7 +418,7 @@ async def test_reconfigure_flow_auth_error(hass: HomeAssistant) -> None:
 async def test_reconfigure_flow_connection_error(hass: HomeAssistant) -> None:
     """Test reconfigure flow shows error on connection failure."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonConnectionError("Timeout")
@@ -444,7 +444,7 @@ async def test_reconfigure_flow_connection_error(hass: HomeAssistant) -> None:
 async def test_reconfigure_flow_unknown_error(hass: HomeAssistant) -> None:
     """Test reconfigure flow shows error on unexpected exception."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=RuntimeError("Unexpected")
@@ -470,7 +470,7 @@ async def test_reconfigure_flow_unknown_error(hass: HomeAssistant) -> None:
 async def test_reauth_flow_unknown_error(hass: HomeAssistant) -> None:
     """Test reauth flow shows error on unexpected exception."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=RuntimeError("Unexpected")
@@ -499,7 +499,7 @@ async def test_reauth_flow_unknown_error(hass: HomeAssistant) -> None:
 async def test_2fa_flow_connection_error(hass: HomeAssistant) -> None:
     """Test 2FA step with connection error during code verification."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -529,7 +529,7 @@ async def test_2fa_flow_connection_error(hass: HomeAssistant) -> None:
 async def test_2fa_flow_auth_error(hass: HomeAssistant) -> None:
     """Test 2FA step with auth error during code verification."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -559,7 +559,7 @@ async def test_2fa_flow_auth_error(hass: HomeAssistant) -> None:
 async def test_2fa_flow_unknown_error(hass: HomeAssistant) -> None:
     """Test 2FA step with unexpected error during code verification."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -589,7 +589,7 @@ async def test_2fa_flow_unknown_error(hass: HomeAssistant) -> None:
 async def test_2fa_flow_2fa_required_again(hass: HomeAssistant) -> None:
     """Test 2FA step when server returns 2FA required again (treated as invalid code)."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -622,7 +622,7 @@ async def test_2fa_flow_2fa_required_again(hass: HomeAssistant) -> None:
 async def test_reauth_flow_2fa_success(hass: HomeAssistant) -> None:
     """Test reauth triggers 2FA and completes successfully."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.token = MOCK_TOKEN
@@ -663,7 +663,7 @@ async def test_reauth_flow_2fa_success(hass: HomeAssistant) -> None:
 async def test_reauth_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
     """Test reauth 2FA step with invalid code."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(
@@ -702,7 +702,7 @@ async def test_reauth_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
 async def test_reconfigure_flow_2fa_success(hass: HomeAssistant) -> None:
     """Test reconfigure triggers 2FA and completes successfully."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.token = MOCK_TOKEN
@@ -743,7 +743,7 @@ async def test_reconfigure_flow_2fa_success(hass: HomeAssistant) -> None:
 async def test_reconfigure_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
     """Test reconfigure 2FA step with invalid code."""
     with patch(
-        "homeassistant.components.leviton.config_flow.LevitonClient"
+        "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
         mock_client = mock_cls.return_value
         mock_client.login = AsyncMock(

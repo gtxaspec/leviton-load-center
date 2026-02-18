@@ -12,7 +12,7 @@ from aioleviton import LevitonAuthError, LevitonConnectionError
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from homeassistant.components.leviton.coordinator import (
+from homeassistant.components.leviton_load_center.coordinator import (
     LevitonCoordinator,
     LevitonData,
 )
@@ -384,7 +384,7 @@ async def test_check_firmware_updates_whem_update_available(
     coordinator.data = LevitonData(whems={whem.id: whem})
 
     with patch(
-        "homeassistant.components.leviton.coordinator.ir"
+        "homeassistant.components.leviton_load_center.coordinator.ir"
     ) as mock_ir:
         coordinator._check_firmware_updates()
         mock_ir.async_create_issue.assert_called_once()
@@ -406,7 +406,7 @@ async def test_check_firmware_updates_whem_up_to_date(
     coordinator.data = LevitonData(whems={whem.id: whem})
 
     with patch(
-        "homeassistant.components.leviton.coordinator.ir"
+        "homeassistant.components.leviton_load_center.coordinator.ir"
     ) as mock_ir:
         coordinator._check_firmware_updates()
         mock_ir.async_delete_issue.assert_called_once()
@@ -425,7 +425,7 @@ async def test_check_firmware_updates_panel_update_available(
     coordinator.data = LevitonData(panels={panel.id: panel})
 
     with patch(
-        "homeassistant.components.leviton.coordinator.ir"
+        "homeassistant.components.leviton_load_center.coordinator.ir"
     ) as mock_ir:
         coordinator._check_firmware_updates()
         mock_ir.async_create_issue.assert_called_once()
@@ -446,7 +446,7 @@ async def test_check_firmware_updates_panel_up_to_date(
     coordinator.data = LevitonData(panels={panel.id: panel})
 
     with patch(
-        "homeassistant.components.leviton.coordinator.ir"
+        "homeassistant.components.leviton_load_center.coordinator.ir"
     ) as mock_ir:
         coordinator._check_firmware_updates()
         mock_ir.async_delete_issue.assert_called_once()

@@ -17,7 +17,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from homeassistant.components.leviton.const import CONF_TOKEN, CONF_USER_ID, DOMAIN
+from homeassistant.components.leviton_load_center.const import CONF_TOKEN, CONF_USER_ID, DOMAIN
 
 from .conftest import (
     MOCK_AUTH_TOKEN,
@@ -50,7 +50,7 @@ async def test_setup_entry_auth_error(
 ) -> None:
     """Test setup fails with auth error triggers reauth."""
     with patch(
-        "homeassistant.components.leviton.LevitonClient",
+        "homeassistant.components.leviton_load_center.LevitonClient",
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonAuthError("Invalid credentials")
@@ -67,7 +67,7 @@ async def test_setup_entry_token_and_login_both_fail(
 ) -> None:
     """Test both token restore and login fail with auth error → SETUP_ERROR."""
     with patch(
-        "homeassistant.components.leviton.LevitonClient",
+        "homeassistant.components.leviton_load_center.LevitonClient",
     ) as mock_cls:
         client = mock_cls.return_value
         client.restore_session = MagicMock()
@@ -106,7 +106,7 @@ async def test_setup_entry_connection_error(
 ) -> None:
     """Test setup fails with connection error raises ConfigEntryNotReady."""
     with patch(
-        "homeassistant.components.leviton.LevitonClient",
+        "homeassistant.components.leviton_load_center.LevitonClient",
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonConnectionError("Network error")
@@ -141,7 +141,7 @@ async def test_remove_config_entry_device(
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Test removing a device from a config entry."""
-    from homeassistant.components.leviton import (
+    from homeassistant.components.leviton_load_center import (
         async_remove_config_entry_device,
     )
 
@@ -231,7 +231,7 @@ async def test_setup_entry_token_restore_connection_error(
 ) -> None:
     """Test token path raises ConfigEntryNotReady on connection error."""
     with patch(
-        "homeassistant.components.leviton.LevitonClient",
+        "homeassistant.components.leviton_load_center.LevitonClient",
     ) as mock_cls:
         client = mock_cls.return_value
         client.restore_session = MagicMock()
@@ -282,7 +282,7 @@ async def test_setup_entry_2fa_required(
 ) -> None:
     """Test LevitonTwoFactorRequired raises ConfigEntryAuthFailed."""
     with patch(
-        "homeassistant.components.leviton.LevitonClient",
+        "homeassistant.components.leviton_load_center.LevitonClient",
     ) as mock_cls:
         mock_cls.return_value.login = AsyncMock(
             side_effect=LevitonTwoFactorRequired("2FA required")

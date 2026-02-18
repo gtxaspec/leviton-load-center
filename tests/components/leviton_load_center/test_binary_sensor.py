@@ -5,17 +5,17 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import MagicMock
 
-from homeassistant.components.leviton.binary_sensor import (
+from homeassistant.components.leviton_load_center.binary_sensor import (
     CONNECTIVITY_DESCRIPTION,
     LevitonPanelConnectivity,
     LevitonWhemConnectivity,
     async_setup_entry,
 )
-from homeassistant.components.leviton.coordinator import (
+from homeassistant.components.leviton_load_center.coordinator import (
     LevitonData,
     LevitonRuntimeData,
 )
-from homeassistant.components.leviton.entity import (
+from homeassistant.components.leviton_load_center.entity import (
     panel_device_info,
     whem_device_info,
 )

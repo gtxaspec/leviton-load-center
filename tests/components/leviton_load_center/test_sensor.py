@@ -9,8 +9,8 @@ import pytest
 
 from aioleviton import Breaker, Ct, Whem
 
-from homeassistant.components.leviton.coordinator import LevitonData
-from homeassistant.components.leviton.sensor import (
+from homeassistant.components.leviton_load_center.coordinator import LevitonData
+from homeassistant.components.leviton_load_center.sensor import (
     BREAKER_SENSORS,
     CT_SENSORS,
     PANEL_SENSORS,

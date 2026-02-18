@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-DOMAIN = "leviton"
+DOMAIN = "leviton_load_center"
 LOGGER = logging.getLogger(__package__)
 LOGGER.setLevel(logging.DEBUG)
 

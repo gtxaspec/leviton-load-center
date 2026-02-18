@@ -5,9 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import MagicMock
 
-from homeassistant.components.leviton.const import DOMAIN
-from homeassistant.components.leviton.coordinator import LevitonData
-from homeassistant.components.leviton.entity import (
+from homeassistant.components.leviton_load_center.const import DOMAIN
+from homeassistant.components.leviton_load_center.coordinator import LevitonData
+from homeassistant.components.leviton_load_center.entity import (
     LevitonEntity,
     breaker_device_info,
     ct_device_info,
