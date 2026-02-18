@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from aioleviton import LevitonConnectionError
+
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY
+from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import LevitonEntity, breaker_device_info
 
@@ -56,7 +60,7 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
         coordinator: LevitonCoordinator,
         description: EntityDescription,
         breaker_id: str,
-        device_info: "DeviceInfo",  # noqa: F821
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the breaker switch."""
         super().__init__(coordinator, description, breaker_id, device_info)
@@ -74,10 +78,30 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the breaker."""
-        await self.coordinator.client.turn_on_breaker(self._device_id)
+        try:
+            await self.coordinator.client.turn_on_breaker(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="breaker_control_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the breaker (trip)."""
-        await self.coordinator.client.trip_breaker(self._device_id)
+        try:
+            await self.coordinator.client.trip_breaker(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="breaker_control_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err
         await self.coordinator.async_request_refresh()

@@ -9,9 +9,9 @@ import pytest
 
 from aioleviton import AuthToken, Breaker, Ct, Panel, Permission, Residence, Whem
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant.components.leviton.const import DOMAIN
 
@@ -221,15 +221,12 @@ def mock_config_entry_data() -> dict:
 
 
 @pytest.fixture
-def mock_config_entry(hass: HomeAssistant) -> ConfigEntry:
+def mock_config_entry(hass: HomeAssistant) -> MockConfigEntry:
     """Create and register a mock config entry."""
-    entry = ConfigEntry(
-        version=1,
-        minor_version=1,
+    entry = MockConfigEntry(
         domain=DOMAIN,
         title=MOCK_EMAIL,
         data={CONF_EMAIL: MOCK_EMAIL, CONF_PASSWORD: MOCK_PASSWORD},
-        source="user",
         unique_id=MOCK_EMAIL.lower(),
     )
     entry.add_to_hass(hass)
@@ -267,20 +264,20 @@ def mock_client() -> Generator[AsyncMock]:
         client.identify_whem = AsyncMock()
         client.set_panel_bandwidth = AsyncMock()
         client.set_whem_bandwidth = AsyncMock()
-        yield client
-
-
-@pytest.fixture
-def mock_websocket() -> Generator[MagicMock]:
-    """Return a mocked LevitonWebSocket."""
-    with patch(
-        "homeassistant.components.leviton.coordinator.LevitonWebSocket",
-    ) as mock_ws_cls:
-        ws = mock_ws_cls.return_value
+        # create_websocket returns a mock WS (used by mock_websocket fixture)
+        ws = MagicMock()
         ws.connect = AsyncMock()
         ws.disconnect = AsyncMock()
         ws.subscribe = AsyncMock()
         ws.unsubscribe = AsyncMock()
         ws.on_notification = MagicMock(return_value=MagicMock())
         ws.on_disconnect = MagicMock(return_value=MagicMock())
-        yield ws
+        client.create_websocket = MagicMock(return_value=ws)
+        client._mock_ws = ws  # expose for mock_websocket fixture
+        yield client
+
+
+@pytest.fixture
+def mock_websocket(mock_client: AsyncMock) -> Generator[MagicMock]:
+    """Return the mocked LevitonWebSocket from mock_client.create_websocket()."""
+    yield mock_client._mock_ws

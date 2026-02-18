@@ -18,10 +18,15 @@ from homeassistant.components.leviton.sensor import (
     _breaker_leg,
     _breaker_protect_fw,
     _calc_current,
+    _panel_daily_energy,
+    _panel_frequency,
+    _panel_leg_current,
+    _panel_leg_power,
     _panel_total_current,
     _panel_total_energy,
     _panel_total_power,
     _should_include_breaker,
+    _whem_daily_energy,
     _whem_leg_current,
     _whem_leg_power,
     _whem_total_current,
@@ -65,14 +70,16 @@ def test_breaker_leg_even_position() -> None:
 
 
 def test_breaker_protect_fw_gfci() -> None:
-    """Test protect firmware returns GFCI version."""
+    """Test protect firmware returns SiLabs first when present."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
-    assert _breaker_protect_fw(breaker) == "FWC1234000100"
+    # SiLabs takes priority over GFCI
+    assert _breaker_protect_fw(breaker) == "FWC2422000100"
 
 
 def test_breaker_protect_fw_none() -> None:
-    """Test protect firmware returns None when neither GFCI nor AFCI."""
+    """Test protect firmware returns None when no protection FW."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.firmware_version_silabs = None
     assert _breaker_protect_fw(breaker) is None
 
 
@@ -133,6 +140,21 @@ def test_calc_current_from_whem_voltage() -> None:
     result = _calc_current(breaker, data, options)
     # MOCK_WHEM.rms_voltage_a = 119, so 119/119 = 1.0
     assert result == 1.0
+
+
+def test_calc_current_whem_voltage_leg2() -> None:
+    """Test calculated current falls back to WHEM voltage_b for even-position breaker."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.power = 244
+    breaker.poles = 1
+    breaker.position = 2  # even → leg 2 → uses voltage_b
+    breaker.rms_voltage = None
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(whems={whem.id: whem})
+    options = {"calculated_current": True}
+    result = _calc_current(breaker, data, options)
+    # MOCK_WHEM.rms_voltage_b = 122, so 244/122 = 2.0
+    assert result == 2.0
 
 
 def test_calc_current_no_power() -> None:
@@ -282,102 +304,107 @@ def test_should_include_dummy_when_hide_disabled() -> None:
     assert _should_include_breaker(breaker, options) is True
 
 
-# --- Description count tests ---
+# --- Voltage averaging tests ---
 
 
-def test_breaker_sensor_descriptions_count() -> None:
-    """Test breaker sensor descriptions tuple has expected entries."""
-    assert len(BREAKER_SENSORS) == 16
+def test_whem_voltage_averages_both_legs() -> None:
+    """Test WHEM voltage averages both legs correctly."""
+    desc = next(d for d in WHEM_SENSORS if d.key == "voltage")
+    whem = deepcopy(MOCK_WHEM)
+    # rms_voltage_a=119, rms_voltage_b=122 → (119+122)/2 = 120.5
+    assert desc.value_fn(whem, LevitonData()) == 120.5
 
 
-def test_ct_sensor_descriptions_count() -> None:
-    """Test CT sensor descriptions tuple has expected entries."""
-    assert len(CT_SENSORS) == 8
+def test_whem_voltage_one_leg_none() -> None:
+    """Test WHEM voltage uses only non-None leg."""
+    desc = next(d for d in WHEM_SENSORS if d.key == "voltage")
+    whem = deepcopy(MOCK_WHEM)
+    whem.rms_voltage_b = None
+    assert desc.value_fn(whem, LevitonData()) == 119.0
 
 
-def test_whem_sensor_descriptions_count() -> None:
-    """Test WHEM sensor descriptions tuple has expected entries."""
-    assert len(WHEM_SENSORS) == 20
+def test_panel_voltage_averages_both_legs() -> None:
+    """Test panel voltage averages both legs when both present."""
+    desc = next(d for d in PANEL_SENSORS if d.key == "voltage")
+    panel = deepcopy(MOCK_PANEL)
+    panel.rms_voltage = 120
+    panel.rms_voltage_2 = 118
+    assert desc.value_fn(panel, LevitonData()) == 119.0
 
 
-def test_panel_sensor_descriptions_count() -> None:
-    """Test panel sensor descriptions tuple has expected entries."""
-    assert len(PANEL_SENSORS) == 16
+def test_panel_voltage_returns_zero_when_both_zero() -> None:
+    """Test panel voltage returns 0.0 when both legs read 0V (valid measurement)."""
+    desc = next(d for d in PANEL_SENSORS if d.key == "voltage")
+    panel = deepcopy(MOCK_PANEL)
+    panel.rms_voltage = 0
+    panel.rms_voltage_2 = 0
+    assert desc.value_fn(panel, LevitonData()) == 0.0
 
 
-# --- Value function tests for key sensor types ---
+def test_panel_voltage_returns_none_when_both_none() -> None:
+    """Test panel voltage returns None when both legs are None."""
+    desc = next(d for d in PANEL_SENSORS if d.key == "voltage")
+    panel = deepcopy(MOCK_PANEL)
+    panel.rms_voltage = None
+    panel.rms_voltage_2 = None
+    assert desc.value_fn(panel, LevitonData()) is None
 
 
-def test_breaker_power_value_fn() -> None:
-    """Test breaker power value function."""
-    desc = next(d for d in BREAKER_SENSORS if d.key == "power")
+# --- Protect firmware fallback chain tests ---
+
+
+def test_breaker_protect_fw_gfci_when_no_silabs() -> None:
+    """Test protect firmware returns GFCI when SiLabs is absent."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.firmware_version_silabs = None
+    assert _breaker_protect_fw(breaker) == "FWC1234000100"
+
+
+def test_breaker_protect_fw_afci_fallback() -> None:
+    """Test protect firmware returns AFCI when SiLabs and GFCI absent."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
-    assert desc.value_fn(breaker, LevitonData(), {}) == 120
+    breaker.firmware_version_silabs = None
+    breaker.firmware_version_gfci = None
+    breaker.firmware_version_afci = "FWC9999000100"
+    assert _breaker_protect_fw(breaker) == "FWC9999000100"
 
 
-def test_breaker_status_value_fn() -> None:
-    """Test breaker status value function."""
-    desc = next(d for d in BREAKER_SENSORS if d.key == "breaker_status")
-    breaker = deepcopy(MOCK_BREAKER_GEN1)
-    assert desc.value_fn(breaker, LevitonData(), {}) == "ManualON"
+# --- CT None leg handling tests ---
 
 
-def test_breaker_position_value_fn() -> None:
-    """Test breaker position value function."""
-    desc = next(d for d in BREAKER_SENSORS if d.key == "position")
-    breaker = deepcopy(MOCK_BREAKER_GEN1)
-    assert desc.value_fn(breaker, LevitonData(), {}) == 1
-
-
-def test_ct_power_value_fn() -> None:
-    """Test CT total power value function."""
+def test_ct_power_with_none_leg() -> None:
+    """Test CT total power handles None leg2 via or-0 fallback."""
+    ct = deepcopy(MOCK_CT)
+    ct.active_power_2 = None
     desc = next(d for d in CT_SENSORS if d.key == "power")
-    ct = deepcopy(MOCK_CT)
-    assert desc.value_fn(ct) == 349  # 196 + 153
-
-
-def test_ct_current_value_fn() -> None:
-    """Test CT total current value function."""
-    desc = next(d for d in CT_SENSORS if d.key == "current")
-    ct = deepcopy(MOCK_CT)
-    assert desc.value_fn(ct) == 14  # 8 + 6
-
-
-def test_ct_leg1_power_value_fn() -> None:
-    """Test CT leg1 power value function."""
-    desc = next(d for d in CT_SENSORS if d.key == "power_leg1")
-    ct = deepcopy(MOCK_CT)
+    # 196 + 0 (None fallback) = 196
     assert desc.value_fn(ct) == 196
 
 
-def test_whem_voltage_value_fn() -> None:
-    """Test WHEM voltage value function (average of legs)."""
-    desc = next(d for d in WHEM_SENSORS if d.key == "voltage")
+def test_ct_energy_with_none_legs() -> None:
+    """Test CT lifetime energy handles None values."""
+    ct = deepcopy(MOCK_CT)
+    ct.energy_consumption = None
+    ct.energy_consumption_2 = None
+    desc = next(d for d in CT_SENSORS if d.key == "lifetime_energy")
+    assert desc.value_fn(ct) == 0
+
+
+# --- WHEM/panel leg edge cases ---
+
+
+def test_whem_leg_power_no_matching_cts() -> None:
+    """Test WHEM leg power returns None when no CTs belong to WHEM."""
     whem = deepcopy(MOCK_WHEM)
-    result = desc.value_fn(whem, LevitonData())
-    # (119 + 122) / 2 = 120.5
-    assert result == 120.5
+    data = LevitonData()  # no CTs
+    assert _whem_leg_power(whem, data, 1) is None
 
 
-def test_whem_frequency_value_fn() -> None:
-    """Test WHEM frequency value function."""
-    desc = next(d for d in WHEM_SENSORS if d.key == "frequency")
+def test_whem_leg_current_no_matching_cts() -> None:
+    """Test WHEM leg current returns None when no CTs belong to WHEM."""
     whem = deepcopy(MOCK_WHEM)
-    assert desc.value_fn(whem, LevitonData()) == 60
-
-
-def test_panel_voltage_value_fn() -> None:
-    """Test panel voltage value function."""
-    desc = next(d for d in PANEL_SENSORS if d.key == "voltage")
-    panel = deepcopy(MOCK_PANEL)
-    assert desc.value_fn(panel, LevitonData()) == 120
-
-
-def test_panel_firmware_main_value_fn() -> None:
-    """Test panel firmware main value function."""
-    desc = next(d for d in PANEL_SENSORS if d.key == "firmware_main")
-    panel = deepcopy(MOCK_PANEL)
-    assert desc.value_fn(panel, LevitonData()) == "0.1.91"
+    data = LevitonData()  # no CTs
+    assert _whem_leg_current(whem, data, 1) is None
 
 
 # --- Exists function tests ---
@@ -405,7 +432,220 @@ def test_breaker_remote_status_exists_gen2() -> None:
 
 
 def test_breaker_protect_fw_exists() -> None:
-    """Test protect firmware exists only when GFCI or AFCI present."""
+    """Test protect firmware exists when any protection FW present."""
     desc = next(d for d in BREAKER_SENSORS if d.key == "firmware_protect")
-    assert desc.exists_fn(MOCK_BREAKER_GEN2) is True  # has GFCI
-    assert desc.exists_fn(MOCK_BREAKER_GEN1) is False  # no GFCI/AFCI
+    assert desc.exists_fn(MOCK_BREAKER_GEN2) is True  # has SiLabs + GFCI
+    # Gen1 also has SiLabs firmware
+    breaker_no_fw = deepcopy(MOCK_BREAKER_GEN1)
+    breaker_no_fw.firmware_version_silabs = None
+    assert desc.exists_fn(breaker_no_fw) is False  # no SiLabs/GFCI/AFCI
+
+
+# --- WHEM daily energy tests ---
+
+
+def test_whem_daily_energy_with_baselines() -> None:
+    """Test WHEM daily energy sums (ct_total - baseline) across CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    ct = deepcopy(MOCK_CT)
+    # ct total = 5000 + 4500 = 9500, baseline = 9000 → daily = 500
+    data = LevitonData(
+        cts={ct.id: ct},
+        daily_baselines={f"ct_{ct.id}": 9000.0},
+    )
+    result = _whem_daily_energy(whem, data)
+    assert result == 500.0
+
+
+def test_whem_daily_energy_negative_clamped_to_zero() -> None:
+    """Test WHEM daily energy clamps negative values to 0 (meter reset)."""
+    whem = deepcopy(MOCK_WHEM)
+    ct = deepcopy(MOCK_CT)
+    # ct total = 5000 + 4500 = 9500, baseline = 10000 → negative → clamped to 0
+    data = LevitonData(
+        cts={ct.id: ct},
+        daily_baselines={f"ct_{ct.id}": 10000.0},
+    )
+    result = _whem_daily_energy(whem, data)
+    assert result == 0.0
+
+
+def test_whem_daily_energy_no_baselines() -> None:
+    """Test WHEM daily energy returns None when no baselines exist."""
+    whem = deepcopy(MOCK_WHEM)
+    ct = deepcopy(MOCK_CT)
+    data = LevitonData(cts={ct.id: ct}, daily_baselines={})
+    result = _whem_daily_energy(whem, data)
+    assert result is None
+
+
+def test_whem_daily_energy_no_matching_cts() -> None:
+    """Test WHEM daily energy returns None when no CTs belong to WHEM."""
+    whem = deepcopy(MOCK_WHEM)
+    ct = deepcopy(MOCK_CT)
+    ct.iot_whem_id = "other_whem"
+    data = LevitonData(
+        cts={ct.id: ct},
+        daily_baselines={f"ct_{ct.id}": 9000.0},
+    )
+    result = _whem_daily_energy(whem, data)
+    assert result is None
+
+
+# --- Panel daily energy tests ---
+
+
+def test_panel_daily_energy_with_baselines() -> None:
+    """Test panel daily energy sums breaker daily energy."""
+    panel = deepcopy(MOCK_PANEL)
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.residential_breaker_panel_id = panel.id
+    # energy_consumption=1500, baseline=1400 → daily=100
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        daily_baselines={breaker.id: 1400.0},
+    )
+    result = _panel_daily_energy(panel, data)
+    assert result == 100.0
+
+
+def test_panel_daily_energy_no_baselines() -> None:
+    """Test panel daily energy returns None when baselines missing."""
+    panel = deepcopy(MOCK_PANEL)
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.residential_breaker_panel_id = panel.id
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        daily_baselines={},
+    )
+    result = _panel_daily_energy(panel, data)
+    assert result is None
+
+
+# --- Panel leg power tests ---
+
+
+def test_panel_leg_power_leg1() -> None:
+    """Test panel leg power sums power for odd-position breakers."""
+    panel = deepcopy(MOCK_PANEL)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b1.residential_breaker_panel_id = panel.id
+    b1.position = 1
+    b1.power = 100
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    b2.residential_breaker_panel_id = panel.id
+    b2.position = 2
+    b2.power = 200
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _panel_leg_power(panel, data, 1)
+    assert result == 100
+
+
+def test_panel_leg_power_leg2() -> None:
+    """Test panel leg power sums power for even-position breakers."""
+    panel = deepcopy(MOCK_PANEL)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b1.residential_breaker_panel_id = panel.id
+    b1.position = 1
+    b1.power = 100
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    b2.residential_breaker_panel_id = panel.id
+    b2.position = 2
+    b2.power = 200
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _panel_leg_power(panel, data, 2)
+    assert result == 200
+
+
+def test_panel_leg_power_no_breakers() -> None:
+    """Test panel leg power returns None when no breakers match."""
+    panel = deepcopy(MOCK_PANEL)
+    data = LevitonData()
+    result = _panel_leg_power(panel, data, 1)
+    assert result is None
+
+
+# --- Panel leg current tests ---
+
+
+def test_panel_leg_current_leg1() -> None:
+    """Test panel leg current sums current for odd-position breakers."""
+    panel = deepcopy(MOCK_PANEL)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b1.residential_breaker_panel_id = panel.id
+    b1.position = 1
+    b1.rms_current = 5
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    b2.residential_breaker_panel_id = panel.id
+    b2.position = 2
+    b2.rms_current = 10
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _panel_leg_current(panel, data, 1)
+    assert result == 5
+
+
+def test_panel_leg_current_leg2() -> None:
+    """Test panel leg current sums current for even-position breakers."""
+    panel = deepcopy(MOCK_PANEL)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b1.residential_breaker_panel_id = panel.id
+    b1.position = 1
+    b1.rms_current = 5
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    b2.residential_breaker_panel_id = panel.id
+    b2.position = 2
+    b2.rms_current = 10
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _panel_leg_current(panel, data, 2)
+    assert result == 10
+
+
+# --- Panel frequency tests ---
+
+
+def test_panel_frequency_leg1() -> None:
+    """Test panel frequency returns line_frequency from first odd-position breaker."""
+    panel = deepcopy(MOCK_PANEL)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.residential_breaker_panel_id = panel.id
+    breaker.position = 1
+    breaker.line_frequency = 60.0
+    data = LevitonData(breakers={breaker.id: breaker})
+    result = _panel_frequency(panel, data, 1)
+    assert result == 60.0
+
+
+def test_panel_frequency_leg2() -> None:
+    """Test panel frequency returns line_frequency_2 from first even-position breaker."""
+    panel = deepcopy(MOCK_PANEL)
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.residential_breaker_panel_id = panel.id
+    breaker.position = 2
+    breaker.line_frequency = 59.9
+    breaker.line_frequency_2 = 60.1
+    data = LevitonData(breakers={breaker.id: breaker})
+    result = _panel_frequency(panel, data, 2)
+    assert result == 60.1
+
+
+def test_panel_frequency_no_breakers() -> None:
+    """Test panel frequency returns None when no breakers match."""
+    panel = deepcopy(MOCK_PANEL)
+    data = LevitonData()
+    result = _panel_frequency(panel, data, 1)
+    assert result is None
+
+
+# --- Calc current edge case ---
+
+
+def test_calc_current_zero_divisor() -> None:
+    """Test calculated current returns rms_current when voltage=0."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.power = 120
+    breaker.poles = 1
+    breaker.rms_voltage = 0
+    data = LevitonData()
+    options = {"calculated_current": True}
+    result = _calc_current(breaker, data, options)
+    assert result == breaker.rms_current

@@ -5,11 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.components.leviton.coordinator import LevitonData
+from homeassistant.components.leviton.coordinator import LevitonData, LevitonRuntimeData
 from homeassistant.components.leviton.entity import breaker_device_info
 from homeassistant.components.leviton.switch import (
     BREAKER_SWITCH_DESCRIPTION,
     LevitonBreakerSwitch,
+    async_setup_entry,
 )
 
 from .conftest import MOCK_BREAKER_GEN1, MOCK_BREAKER_GEN2, MOCK_WHEM
@@ -105,3 +106,48 @@ async def test_turn_off(mock_client) -> None:
 
     mock_client.trip_breaker.assert_called_once_with(breaker.id)
     switch.coordinator.async_request_refresh.assert_called_once()
+
+
+# --- Platform setup tests ---
+
+
+async def test_setup_creates_switches_for_gen2_only() -> None:
+    """Test setup creates switches for Gen 2 (can_remote_on) only, not Gen 1."""
+    gen1 = deepcopy(MOCK_BREAKER_GEN1)  # can_remote_on=False
+    gen2 = deepcopy(MOCK_BREAKER_GEN2)  # can_remote_on=True
+    data = LevitonData(
+        breakers={gen1.id: gen1, gen2.id: gen2},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    assert len(added_entities) == 1
+    assert added_entities[0]._device_id == gen2.id
+
+
+async def test_setup_read_only_creates_no_switches() -> None:
+    """Test setup creates no switches when read_only=True."""
+    gen2 = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(
+        breakers={gen2.id: gen2},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {"read_only": True}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    assert len(added_entities) == 0
+
+

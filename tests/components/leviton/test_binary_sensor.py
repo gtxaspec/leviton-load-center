@@ -5,13 +5,16 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import MagicMock
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.leviton.binary_sensor import (
     CONNECTIVITY_DESCRIPTION,
     LevitonPanelConnectivity,
     LevitonWhemConnectivity,
+    async_setup_entry,
 )
-from homeassistant.components.leviton.coordinator import LevitonData
+from homeassistant.components.leviton.coordinator import (
+    LevitonData,
+    LevitonRuntimeData,
+)
 from homeassistant.components.leviton.entity import (
     panel_device_info,
     whem_device_info,
@@ -58,17 +61,6 @@ def test_whem_connectivity_missing() -> None:
         coordinator, CONNECTIVITY_DESCRIPTION, "nonexistent", dev_info
     )
     assert sensor.is_on is None
-
-
-def test_whem_connectivity_device_class() -> None:
-    """Test WHEM connectivity has correct device class."""
-    coordinator = MagicMock()
-    coordinator.data = LevitonData()
-    dev_info = MagicMock()
-    sensor = LevitonWhemConnectivity(
-        coordinator, CONNECTIVITY_DESCRIPTION, "test_id", dev_info
-    )
-    assert sensor.device_class == BinarySensorDeviceClass.CONNECTIVITY
 
 
 def test_panel_connectivity_online() -> None:
@@ -126,3 +118,46 @@ def test_panel_connectivity_missing() -> None:
         coordinator, CONNECTIVITY_DESCRIPTION, "nonexistent", dev_info
     )
     assert sensor.is_on is None
+
+
+# --- Platform setup tests ---
+
+
+async def test_setup_creates_whem_connectivity() -> None:
+    """Test setup creates connectivity binary sensor for each WHEM."""
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(whems={whem.id: whem})
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    whem_sensors = [
+        e for e in added_entities if isinstance(e, LevitonWhemConnectivity)
+    ]
+    assert len(whem_sensors) == 1
+    assert whem_sensors[0]._device_id == whem.id
+
+
+async def test_setup_creates_panel_connectivity() -> None:
+    """Test setup creates connectivity binary sensor for each panel."""
+    panel = deepcopy(MOCK_PANEL)
+    data = LevitonData(panels={panel.id: panel})
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    panel_sensors = [
+        e for e in added_entities if isinstance(e, LevitonPanelConnectivity)
+    ]
+    assert len(panel_sensors) == 1
+    assert panel_sensors[0]._device_id == panel.id

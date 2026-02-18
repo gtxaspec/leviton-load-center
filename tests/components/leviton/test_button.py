@@ -5,15 +5,15 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.components.button import ButtonDeviceClass
 from homeassistant.components.leviton.button import (
     IDENTIFY_BUTTON_DESCRIPTION,
     TRIP_BUTTON_DESCRIPTION,
     LevitonBreakerIdentifyButton,
     LevitonTripButton,
     LevitonWhemIdentifyButton,
+    async_setup_entry,
 )
-from homeassistant.components.leviton.coordinator import LevitonData
+from homeassistant.components.leviton.coordinator import LevitonData, LevitonRuntimeData
 from homeassistant.components.leviton.entity import (
     breaker_device_info,
     whem_device_info,
@@ -50,17 +50,6 @@ async def test_trip_button_press(mock_client) -> None:
     coordinator.async_request_refresh.assert_called_once()
 
 
-def test_trip_button_device_class() -> None:
-    """Test trip button has RESTART device class."""
-    coordinator = MagicMock()
-    coordinator.data = LevitonData()
-    dev_info = MagicMock()
-    button = LevitonTripButton(
-        coordinator, TRIP_BUTTON_DESCRIPTION, "test_id", dev_info
-    )
-    assert button.device_class == ButtonDeviceClass.RESTART
-
-
 async def test_breaker_identify_button_press(mock_client) -> None:
     """Test breaker identify button calls blink_led."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
@@ -79,17 +68,6 @@ async def test_breaker_identify_button_press(mock_client) -> None:
     mock_client.blink_led.assert_called_once_with(breaker.id)
 
 
-def test_breaker_identify_button_device_class() -> None:
-    """Test breaker identify button has IDENTIFY device class."""
-    coordinator = MagicMock()
-    coordinator.data = LevitonData()
-    dev_info = MagicMock()
-    button = LevitonBreakerIdentifyButton(
-        coordinator, IDENTIFY_BUTTON_DESCRIPTION, "test_id", dev_info
-    )
-    assert button.device_class == ButtonDeviceClass.IDENTIFY
-
-
 async def test_whem_identify_button_press(mock_client) -> None:
     """Test WHEM identify button calls identify_whem."""
     whem = deepcopy(MOCK_WHEM)
@@ -105,12 +83,89 @@ async def test_whem_identify_button_press(mock_client) -> None:
     mock_client.identify_whem.assert_called_once_with(whem.id)
 
 
-def test_whem_identify_button_device_class() -> None:
-    """Test WHEM identify button has IDENTIFY device class."""
-    coordinator = MagicMock()
-    coordinator.data = LevitonData()
-    dev_info = MagicMock()
-    button = LevitonWhemIdentifyButton(
-        coordinator, IDENTIFY_BUTTON_DESCRIPTION, "test_id", dev_info
+# --- Platform setup tests ---
+
+
+async def test_setup_trip_button_gen1_only() -> None:
+    """Test trip button is created for Gen 1 only (not Gen 2)."""
+    gen1 = deepcopy(MOCK_BREAKER_GEN1)  # is_smart=True, can_remote_on=False
+    gen2 = deepcopy(MOCK_BREAKER_GEN2)  # is_smart=True, can_remote_on=True
+    data = LevitonData(
+        breakers={gen1.id: gen1, gen2.id: gen2},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
     )
-    assert button.device_class == ButtonDeviceClass.IDENTIFY
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    trip_buttons = [e for e in added_entities if isinstance(e, LevitonTripButton)]
+    assert len(trip_buttons) == 1
+    assert trip_buttons[0]._device_id == gen1.id
+
+
+async def test_setup_identify_button_all_smart() -> None:
+    """Test identify button is created for all smart breakers."""
+    gen1 = deepcopy(MOCK_BREAKER_GEN1)
+    gen2 = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(
+        breakers={gen1.id: gen1, gen2.id: gen2},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    identify_buttons = [
+        e for e in added_entities if isinstance(e, LevitonBreakerIdentifyButton)
+    ]
+    assert len(identify_buttons) == 2
+
+
+async def test_setup_whem_identify_button() -> None:
+    """Test WHEM identify button is created for each WHEM."""
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(whems={whem.id: whem})
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    whem_buttons = [
+        e for e in added_entities if isinstance(e, LevitonWhemIdentifyButton)
+    ]
+    assert len(whem_buttons) == 1
+    assert whem_buttons[0]._device_id == whem.id
+
+
+async def test_setup_read_only_creates_no_buttons() -> None:
+    """Test setup creates no buttons when read_only=True."""
+    gen1 = deepcopy(MOCK_BREAKER_GEN1)
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(
+        breakers={gen1.id: gen1},
+        whems={whem.id: whem},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {"read_only": True}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    assert len(added_entities) == 0

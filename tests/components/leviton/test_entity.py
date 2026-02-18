@@ -164,13 +164,76 @@ def test_ct_device_info_no_whem() -> None:
 def test_entity_unique_id() -> None:
     """Test entity unique ID is formatted correctly."""
     coordinator = MagicMock()
+    coordinator.config_entry.unique_id = "test@example.com"
     description = MagicMock()
     description.key = "power"
     dev_info = MagicMock()
     entity = LevitonEntity(coordinator, description, "device123", dev_info)
-    assert entity.unique_id == "device123_power"
+    assert entity.unique_id == "test@example.com_device123_power"
 
 
-def test_entity_has_entity_name() -> None:
-    """Test entity has _attr_has_entity_name set."""
-    assert LevitonEntity._attr_has_entity_name is True
+# --- Available property tests ---
+
+
+def test_entity_available_whem_present() -> None:
+    """Test entity is available when device_id is in whems."""
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(whems={whem.id: whem})
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, whem.id, MagicMock())
+    assert entity.available is True
+
+
+def test_entity_available_breaker_present() -> None:
+    """Test entity is available when device_id is in breakers."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(breakers={breaker.id: breaker})
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, breaker.id, MagicMock())
+    assert entity.available is True
+
+
+def test_entity_available_ct_present() -> None:
+    """Test entity is available when numeric device_id is in cts."""
+    ct = deepcopy(MOCK_CT)
+    data = LevitonData(cts={ct.id: ct})
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, str(ct.id), MagicMock())
+    assert entity.available is True
+
+
+def test_entity_available_device_missing() -> None:
+    """Test entity is unavailable when device_id is not in any dict."""
+    data = LevitonData()
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, "nonexistent", MagicMock())
+    assert entity.available is False
+
+
+def test_entity_available_coordinator_unavailable() -> None:
+    """Test entity is unavailable when coordinator.last_update_success=False."""
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(whems={whem.id: whem})
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = False
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, whem.id, MagicMock())
+    assert entity.available is False

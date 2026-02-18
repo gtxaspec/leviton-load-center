@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -109,9 +110,9 @@ async def test_ws_notification_whem_breaker_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        whems={MOCK_WHEM.id: MOCK_WHEM},
-        breakers={MOCK_BREAKER_GEN1.id: MOCK_BREAKER_GEN1},
-        cts={MOCK_CT.id: MOCK_CT},
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
+        breakers={MOCK_BREAKER_GEN1.id: deepcopy(MOCK_BREAKER_GEN1)},
+        cts={MOCK_CT.id: deepcopy(MOCK_CT)},
     )
 
     notification = {
@@ -134,8 +135,8 @@ async def test_ws_notification_whem_ct_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        whems={MOCK_WHEM.id: MOCK_WHEM},
-        cts={MOCK_CT.id: MOCK_CT},
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
+        cts={MOCK_CT.id: deepcopy(MOCK_CT)},
     )
 
     notification = {
@@ -158,7 +159,7 @@ async def test_ws_notification_whem_own_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        whems={MOCK_WHEM.id: MOCK_WHEM},
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
     )
 
     notification = {
@@ -178,8 +179,8 @@ async def test_ws_notification_panel_breaker_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        panels={MOCK_PANEL.id: MOCK_PANEL},
-        breakers={MOCK_BREAKER_GEN2.id: MOCK_BREAKER_GEN2},
+        panels={MOCK_PANEL.id: deepcopy(MOCK_PANEL)},
+        breakers={MOCK_BREAKER_GEN2.id: deepcopy(MOCK_BREAKER_GEN2)},
     )
 
     notification = {
@@ -202,7 +203,7 @@ async def test_ws_notification_panel_own_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        panels={MOCK_PANEL.id: MOCK_PANEL},
+        panels={MOCK_PANEL.id: deepcopy(MOCK_PANEL)},
     )
 
     notification = {
@@ -221,7 +222,7 @@ async def test_ws_notification_direct_breaker_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        breakers={MOCK_BREAKER_GEN1.id: MOCK_BREAKER_GEN1},
+        breakers={MOCK_BREAKER_GEN1.id: deepcopy(MOCK_BREAKER_GEN1)},
     )
 
     notification = {
@@ -240,7 +241,7 @@ async def test_ws_notification_direct_ct_update(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        cts={MOCK_CT.id: MOCK_CT},
+        cts={MOCK_CT.id: deepcopy(MOCK_CT)},
     )
 
     notification = {
@@ -304,7 +305,7 @@ async def test_async_update_data_auth_error(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        whems={MOCK_WHEM.id: MOCK_WHEM},
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
     )
     coordinator._residence_ids = [MOCK_RESIDENCE.id]
 
@@ -320,7 +321,7 @@ async def test_async_update_data_connection_error(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        whems={MOCK_WHEM.id: MOCK_WHEM},
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
     )
     coordinator._residence_ids = [MOCK_RESIDENCE.id]
 
@@ -333,7 +334,7 @@ async def test_async_shutdown_disconnects_ws(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(
-        panels={MOCK_PANEL.id: MOCK_PANEL},
+        panels={MOCK_PANEL.id: deepcopy(MOCK_PANEL)},
     )
 
     mock_ws = MagicMock()
@@ -364,3 +365,223 @@ async def test_async_shutdown_no_ws(hass, mock_client) -> None:
 
     # Should not raise
     await coordinator.async_shutdown()
+
+
+# --- Firmware update check tests ---
+
+
+async def test_check_firmware_updates_whem_update_available(
+    hass, mock_client
+) -> None:
+    """Test firmware check creates repair issue when WHEM update available."""
+    from copy import deepcopy
+
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "1.7.6"
+    whem.raw = {"downloaded": "2.0.13"}
+    coordinator.data = LevitonData(whems={whem.id: whem})
+
+    with patch(
+        "homeassistant.components.leviton.coordinator.ir"
+    ) as mock_ir:
+        coordinator._check_firmware_updates()
+        mock_ir.async_create_issue.assert_called_once()
+        call_kwargs = mock_ir.async_create_issue.call_args
+        assert call_kwargs[1]["translation_key"] == "firmware_update_available"
+
+
+async def test_check_firmware_updates_whem_up_to_date(
+    hass, mock_client
+) -> None:
+    """Test firmware check deletes repair issue when WHEM is up to date."""
+    from copy import deepcopy
+
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "2.0.13"
+    whem.raw = {"downloaded": "2.0.13"}
+    coordinator.data = LevitonData(whems={whem.id: whem})
+
+    with patch(
+        "homeassistant.components.leviton.coordinator.ir"
+    ) as mock_ir:
+        coordinator._check_firmware_updates()
+        mock_ir.async_delete_issue.assert_called_once()
+
+
+async def test_check_firmware_updates_panel_update_available(
+    hass, mock_client
+) -> None:
+    """Test firmware check creates repair issue when panel update available."""
+    from copy import deepcopy
+
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    panel = deepcopy(MOCK_PANEL)
+    panel.raw = {"updateAvailability": "AVAILABLE", "updateVersion": "0.2.0"}
+    coordinator.data = LevitonData(panels={panel.id: panel})
+
+    with patch(
+        "homeassistant.components.leviton.coordinator.ir"
+    ) as mock_ir:
+        coordinator._check_firmware_updates()
+        mock_ir.async_create_issue.assert_called_once()
+        call_kwargs = mock_ir.async_create_issue.call_args
+        assert call_kwargs[1]["translation_key"] == "firmware_update_available"
+
+
+async def test_check_firmware_updates_panel_up_to_date(
+    hass, mock_client
+) -> None:
+    """Test firmware check deletes repair issue when panel is up to date."""
+    from copy import deepcopy
+
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    panel = deepcopy(MOCK_PANEL)
+    panel.raw = {"updateAvailability": "UP_TO_DATE"}
+    coordinator.data = LevitonData(panels={panel.id: panel})
+
+    with patch(
+        "homeassistant.components.leviton.coordinator.ir"
+    ) as mock_ir:
+        coordinator._check_firmware_updates()
+        mock_ir.async_delete_issue.assert_called_once()
+
+
+# --- Needs individual breaker subs tests ---
+
+
+def test_needs_individual_breaker_subs_fw_2x() -> None:
+    """Test FW 2.0.13 needs individual breaker subscriptions."""
+    from copy import deepcopy
+
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "2.0.13"
+    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is True
+
+
+def test_needs_individual_breaker_subs_fw_1x() -> None:
+    """Test FW 1.7.6 does not need individual breaker subscriptions."""
+    from copy import deepcopy
+
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "1.7.6"
+    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is False
+
+
+def test_needs_individual_breaker_subs_fw_none() -> None:
+    """Test None FW assumes newest (needs individual subs)."""
+    from copy import deepcopy
+
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = None
+    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is True
+
+
+def test_needs_individual_breaker_subs_fw_unparseable() -> None:
+    """Test unparseable FW assumes newest (needs individual subs)."""
+    from copy import deepcopy
+
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "invalid"
+    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is True
+
+
+# --- REST poll skip test ---
+
+
+async def test_async_update_data_ws_connected_skips_poll(
+    hass, mock_client
+) -> None:
+    """Test REST fallback returns cached data when WS is connected."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
+    )
+    coordinator.ws = MagicMock()  # WS is connected
+
+    result = await coordinator._async_update_data()
+
+    assert result is coordinator.data
+    mock_client.get_whem.assert_not_called()
+
+
+# --- calc_daily_energy tests ---
+
+
+def test_calc_daily_energy_normal() -> None:
+    """Test daily energy calculation (lifetime - baseline) rounded."""
+    data = LevitonData(daily_baselines={"breaker_1": 100.0})
+    result = LevitonCoordinator.calc_daily_energy("breaker_1", 150.123, data)
+    assert result == 50.12
+
+
+def test_calc_daily_energy_none_inputs() -> None:
+    """Test daily energy returns None for None lifetime or missing baseline."""
+    data = LevitonData(daily_baselines={"breaker_1": 100.0})
+    # None lifetime
+    assert LevitonCoordinator.calc_daily_energy("breaker_1", None, data) is None
+    # Missing baseline
+    assert LevitonCoordinator.calc_daily_energy("breaker_2", 150.0, data) is None
+
+
+async def test_async_update_data_rest_poll_refreshes(hass, mock_client) -> None:
+    """Test REST fallback actually refreshes device data when WS is disconnected."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    whem = deepcopy(MOCK_WHEM)
+    panel = deepcopy(MOCK_PANEL)
+    coordinator.data = LevitonData(
+        whems={whem.id: whem},
+        panels={panel.id: panel},
+        breakers={MOCK_BREAKER_GEN1.id: deepcopy(MOCK_BREAKER_GEN1)},
+        cts={MOCK_CT.id: deepcopy(MOCK_CT)},
+    )
+    coordinator.ws = None  # WS is disconnected
+    coordinator._residence_ids = [MOCK_RESIDENCE.id]
+
+    # Set up fresh return values to verify data gets replaced
+    fresh_whem = deepcopy(MOCK_WHEM)
+    fresh_whem.rms_voltage_a = 121
+    mock_client.get_whem = AsyncMock(return_value=fresh_whem)
+    mock_client.get_whem_breakers = AsyncMock(return_value=[deepcopy(MOCK_BREAKER_GEN1)])
+    mock_client.get_cts = AsyncMock(return_value=[deepcopy(MOCK_CT)])
+
+    fresh_panel = deepcopy(MOCK_PANEL)
+    fresh_panel.rms_voltage = 119
+    mock_client.get_panel = AsyncMock(return_value=fresh_panel)
+    mock_client.get_panel_breakers = AsyncMock(return_value=[deepcopy(MOCK_BREAKER_GEN2)])
+
+    result = await coordinator._async_update_data()
+
+    # Verify REST calls were made
+    mock_client.get_whem.assert_called_once_with(whem.id)
+    mock_client.get_panel.assert_called_once_with(panel.id)
+    # Verify data was updated
+    assert result.whems[whem.id].rms_voltage_a == 121
+    assert result.panels[panel.id].rms_voltage == 119
+
+
+async def test_discover_devices_breaker_fetch_failure(hass, mock_client) -> None:
+    """Test graceful handling of breaker fetch failure within WHEM."""
+    mock_client.get_whem_breakers = AsyncMock(
+        side_effect=LevitonConnectionError("Breaker fetch failed")
+    )
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+
+    await coordinator._discover_devices()
+
+    # WHEM itself should be found, but breakers from WHEM should be empty
+    assert MOCK_WHEM.id in coordinator.data.whems
+    # Only panel breakers should be present (panel breaker fetch still works)
+    whem_breakers = [
+        b for b in coordinator.data.breakers.values()
+        if b.iot_whem_id == MOCK_WHEM.id
+    ]
+    assert len(whem_breakers) == 0

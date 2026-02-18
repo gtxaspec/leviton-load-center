@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from aioleviton import LevitonConnectionError
+
 from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY
+from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import LevitonEntity, breaker_device_info, whem_device_info
 
@@ -78,7 +81,17 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Trip the breaker."""
-        await self.coordinator.client.trip_breaker(self._device_id)
+        try:
+            await self.coordinator.client.trip_breaker(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="breaker_control_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err
         await self.coordinator.async_request_refresh()
 
 
@@ -89,7 +102,17 @@ class LevitonBreakerIdentifyButton(LevitonEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Blink the breaker LED."""
-        await self.coordinator.client.blink_led(self._device_id)
+        try:
+            await self.coordinator.client.blink_led(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="identify_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err
 
 
 class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
@@ -99,4 +122,14 @@ class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Blink the WHEM LED."""
-        await self.coordinator.client.identify_whem(self._device_id)
+        try:
+            await self.coordinator.client.identify_whem(self._device_id)
+        except LevitonConnectionError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="identify_failed",
+                translation_placeholders={
+                    "name": self.name or self._device_id,
+                    "error": str(err),
+                },
+            ) from err

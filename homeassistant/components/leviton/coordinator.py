@@ -126,7 +126,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
     @callback
     def _handle_midnight(self, _now: Any) -> None:
         """Schedule the async midnight handler."""
-        self.hass.async_create_task(self._async_handle_midnight())
+        self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_handle_midnight(),
+            "leviton_midnight_reset",
+        )
 
     @staticmethod
     def calc_daily_energy(
@@ -245,19 +249,8 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         if not self.client.token or not self.client.user_id:
             return
 
-        auth_token = self.client._auth_token
-        if auth_token is None:
-            return
-
         try:
-            self.ws = LevitonWebSocket(
-                session=self.client._session,
-                token=auth_token.token,
-                user_id=auth_token.user_id,
-                user=auth_token.user,
-                token_created=auth_token.created,
-                token_ttl=auth_token.ttl,
-            )
+            self.ws = self.client.create_websocket()
             await self.ws.connect()
         except LevitonConnectionError:
             LOGGER.warning("WebSocket connection failed, using REST polling only")
@@ -461,7 +454,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         LOGGER.warning("WebSocket disconnected, falling back to REST polling")
         self.ws = None
         # Schedule a reconnection attempt
-        self.hass.async_create_task(self._reconnect_websocket())
+        self.config_entry.async_create_background_task(
+            self.hass,
+            self._reconnect_websocket(),
+            "leviton_ws_reconnect",
+        )
 
     async def _async_update_data(self) -> LevitonData:
         """Fallback REST polling - only runs when WebSocket is disconnected.

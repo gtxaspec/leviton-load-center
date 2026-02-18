@@ -23,7 +23,7 @@ from homeassistant.const import (
     UnitOfPower,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.device_registry import DeviceInfo, format_mac
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -33,6 +33,9 @@ from .const import (
     DEFAULT_CALCULATED_CURRENT,
     DEFAULT_HIDE_DUMMY,
     DEFAULT_VOLTAGE_208,
+    VOLTAGE_120,
+    VOLTAGE_208,
+    VOLTAGE_240,
 )
 from .coordinator import LevitonConfigEntry, LevitonCoordinator, LevitonData
 from .entity import (
@@ -117,10 +120,10 @@ def _calc_current(
         return breaker.rms_current
 
     if breaker.poles == 2:
-        voltage_208 = options.get(CONF_VOLTAGE_208, DEFAULT_VOLTAGE_208)
-        divisor = 208.0 if voltage_208 else 240.0
+        use_208 = options.get(CONF_VOLTAGE_208, DEFAULT_VOLTAGE_208)
+        divisor = float(VOLTAGE_208 if use_208 else VOLTAGE_240)
     else:
-        divisor = 120.0
+        divisor = float(VOLTAGE_120)
         if breaker.rms_voltage:
             divisor = float(breaker.rms_voltage)
         elif breaker.iot_whem_id and breaker.iot_whem_id in data.whems:
@@ -188,6 +191,12 @@ def _whem_daily_energy(whem: Whem, data: LevitonData) -> float | None:
     return round(total, 2) if found else None
 
 
+def _whem_voltage(whem: Whem, data: LevitonData) -> float | None:
+    """Average non-None voltage legs for a WHEM hub."""
+    vals = [v for v in (whem.rms_voltage_a, whem.rms_voltage_b) if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
 def _whem_leg_power(whem: Whem, data: LevitonData, leg: int) -> int | None:
     """Get CT power for a specific leg."""
     for ct in data.cts.values():
@@ -202,6 +211,12 @@ def _whem_leg_current(whem: Whem, data: LevitonData, leg: int) -> int | None:
         if ct.iot_whem_id == whem.id:
             return ct.rms_current if leg == 1 else ct.rms_current_2
     return None
+
+
+def _panel_voltage(panel: Panel, data: LevitonData) -> float | None:
+    """Average non-None voltage legs for a DAU panel."""
+    vals = [v for v in (panel.rms_voltage, panel.rms_voltage_2) if v is not None]
+    return sum(vals) / len(vals) if vals else None
 
 
 def _panel_total_power(panel: Panel, data: LevitonData) -> int | None:
@@ -295,11 +310,13 @@ def _panel_frequency(
         if breaker.residential_breaker_panel_id != panel.id:
             continue
         if leg == 1 and breaker.position % 2 == 1:
-            if breaker.line_frequency:
+            if breaker.line_frequency is not None:
                 return breaker.line_frequency
         elif leg == 2 and breaker.position % 2 == 0:
-            if breaker.line_frequency_2 or breaker.line_frequency:
-                return breaker.line_frequency_2 or breaker.line_frequency
+            if breaker.line_frequency_2 is not None:
+                return breaker.line_frequency_2
+            if breaker.line_frequency is not None:
+                return breaker.line_frequency
     return None
 
 
@@ -587,11 +604,7 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda w, _d: (
-            ((w.rms_voltage_a or 0) + (w.rms_voltage_b or 0)) / 2
-            if w.rms_voltage_a or w.rms_voltage_b
-            else None
-        ),
+        value_fn=_whem_voltage,
     ),
     LevitonWhemSensorDescription(
         key="voltage_leg1",
@@ -783,11 +796,7 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda p, _d: (
-            ((p.rms_voltage or 0) + (p.rms_voltage_2 or 0)) / 2
-            if p.rms_voltage or p.rms_voltage_2
-            else None
-        ),
+        value_fn=_panel_voltage,
     ),
     LevitonPanelSensorDescription(
         key="voltage_leg1",
@@ -1037,7 +1046,7 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         coordinator: LevitonCoordinator,
         description: LevitonBreakerSensorDescription,
         breaker_id: str,
-        device_info: "DeviceInfo",  # noqa: F821
+        device_info: DeviceInfo,
         options: dict[str, Any],
     ) -> None:
         """Initialize the breaker sensor."""
@@ -1067,7 +1076,7 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
         coordinator: LevitonCoordinator,
         description: LevitonCtSensorDescription,
         ct_id: int,
-        device_info: "DeviceInfo",  # noqa: F821
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the CT sensor."""
         super().__init__(coordinator, description, str(ct_id), device_info)
@@ -1094,7 +1103,7 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
         coordinator: LevitonCoordinator,
         description: LevitonWhemSensorDescription,
         whem_id: str,
-        device_info: "DeviceInfo",  # noqa: F821
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the WHEM sensor."""
         super().__init__(coordinator, description, whem_id, device_info)
@@ -1120,7 +1129,7 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
         coordinator: LevitonCoordinator,
         description: LevitonPanelSensorDescription,
         panel_id: str,
-        device_info: "DeviceInfo",  # noqa: F821
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the panel sensor."""
         super().__init__(coordinator, description, panel_id, device_info)

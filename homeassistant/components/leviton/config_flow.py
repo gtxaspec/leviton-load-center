@@ -64,6 +64,39 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             data[CONF_USER_ID] = self._client.user_id
         return data
 
+    async def _async_try_2fa_login(self, code: str) -> dict[str, str]:
+        """Attempt 2FA login using the existing client, return errors dict."""
+        errors: dict[str, str] = {}
+        assert self._client is not None
+        try:
+            await self._client.login(self._email, self._password, code=code)
+        except LevitonInvalidCode as err:
+            LOGGER.warning("Invalid 2FA code for %s: %s", self._email, err)
+            errors["base"] = "invalid_code"
+        except LevitonTwoFactorRequired:
+            errors["base"] = "invalid_code"
+        except LevitonConnectionError as err:
+            LOGGER.warning("Connection failed during 2FA for %s: %s", self._email, err)
+            errors["base"] = "cannot_connect"
+        except LevitonAuthError as err:
+            LOGGER.warning("Auth failed during 2FA for %s: %s", self._email, err)
+            errors["base"] = "invalid_auth"
+        except Exception:
+            LOGGER.exception("Unexpected error during 2FA for %s", self._email)
+            errors["base"] = "unknown"
+        return errors
+
+    def _show_2fa_form(
+        self, step_id: str, errors: dict[str, str]
+    ) -> ConfigFlowResult:
+        """Show the 2FA verification code form."""
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema({vol.Required(CONF_CODE): str}),
+            errors=errors,
+            description_placeholders={"email": self._email},
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -130,29 +163,8 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            session = async_get_clientsession(self.hass)
-            client = LevitonClient(session)
-
-            try:
-                await client.login(
-                    self._email, self._password, code=user_input[CONF_CODE]
-                )
-            except LevitonInvalidCode as err:
-                LOGGER.warning("Invalid 2FA code for %s: %s", self._email, err)
-                errors["base"] = "invalid_code"
-            except LevitonTwoFactorRequired:
-                errors["base"] = "invalid_code"
-            except LevitonConnectionError as err:
-                LOGGER.warning("Connection failed during 2FA: %s", err)
-                errors["base"] = "cannot_connect"
-            except LevitonAuthError as err:
-                LOGGER.warning("Authentication failed during 2FA for %s: %s", self._email, err)
-                errors["base"] = "invalid_auth"
-            except Exception:
-                LOGGER.exception("Unexpected error during 2FA")
-                errors["base"] = "unknown"
-            else:
-                self._client = client
+            errors = await self._async_try_2fa_login(user_input[CONF_CODE])
+            if not errors:
                 await self.async_set_unique_id(
                     self._email.lower().strip()
                 )
@@ -162,16 +174,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                     data=self._entry_data(),
                 )
 
-        return self.async_show_form(
-            step_id="2fa",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_CODE): str,
-                }
-            ),
-            errors=errors,
-            description_placeholders={"email": self._email},
-        )
+        return self._show_2fa_form("2fa", errors)
 
     async def async_step_reauth(
         self,
@@ -234,44 +237,14 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            session = async_get_clientsession(self.hass)
-            client = LevitonClient(session)
-
-            try:
-                await client.login(
-                    self._email, self._password, code=user_input[CONF_CODE]
-                )
-            except LevitonInvalidCode as err:
-                LOGGER.warning("Invalid 2FA code during reauth for %s: %s", self._email, err)
-                errors["base"] = "invalid_code"
-            except LevitonTwoFactorRequired:
-                errors["base"] = "invalid_code"
-            except LevitonConnectionError as err:
-                LOGGER.warning("Connection failed during 2FA reauth: %s", err)
-                errors["base"] = "cannot_connect"
-            except LevitonAuthError as err:
-                LOGGER.warning("Auth failed during 2FA reauth for %s: %s", self._email, err)
-                errors["base"] = "invalid_auth"
-            except Exception:
-                LOGGER.exception("Unexpected error during 2FA reauth")
-                errors["base"] = "unknown"
-            else:
-                self._client = client
+            errors = await self._async_try_2fa_login(user_input[CONF_CODE])
+            if not errors:
                 return self.async_update_reload_and_abort(
                     self._get_reauth_entry(),
                     data=self._entry_data(),
                 )
 
-        return self.async_show_form(
-            step_id="2fa_reauth",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_CODE): str,
-                }
-            ),
-            errors=errors,
-            description_placeholders={"email": self._email},
-        )
+        return self._show_2fa_form("2fa_reauth", errors)
 
     async def async_step_reconfigure(
         self,
@@ -337,29 +310,8 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            session = async_get_clientsession(self.hass)
-            client = LevitonClient(session)
-
-            try:
-                await client.login(
-                    self._email, self._password, code=user_input[CONF_CODE]
-                )
-            except LevitonInvalidCode as err:
-                LOGGER.warning("Invalid 2FA code during reconfigure for %s: %s", self._email, err)
-                errors["base"] = "invalid_code"
-            except LevitonTwoFactorRequired:
-                errors["base"] = "invalid_code"
-            except LevitonConnectionError as err:
-                LOGGER.warning("Connection failed during 2FA reconfigure: %s", err)
-                errors["base"] = "cannot_connect"
-            except LevitonAuthError as err:
-                LOGGER.warning("Auth failed during 2FA reconfigure for %s: %s", self._email, err)
-                errors["base"] = "invalid_auth"
-            except Exception:
-                LOGGER.exception("Unexpected error during 2FA reconfigure")
-                errors["base"] = "unknown"
-            else:
-                self._client = client
+            errors = await self._async_try_2fa_login(user_input[CONF_CODE])
+            if not errors:
                 await self.async_set_unique_id(self._email.lower().strip())
                 self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(
@@ -367,16 +319,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                     data=self._entry_data(),
                 )
 
-        return self.async_show_form(
-            step_id="2fa_reconfigure",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_CODE): str,
-                }
-            ),
-            errors=errors,
-            description_placeholders={"email": self._email},
-        )
+        return self._show_2fa_form("2fa_reconfigure", errors)
 
 
 class LevitonOptionsFlow(OptionsFlow):
