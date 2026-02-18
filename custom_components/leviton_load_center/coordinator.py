@@ -596,14 +596,16 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         if not data or model_id is None:
             return
 
-        updated = False
+        breaker_ids: list[str] = []
+        ct_ids: list[str] = []
+        hub_updated = False
 
         if model_name == "IotWhem":
             # Check for child breaker updates
             if "ResidentialBreaker" in data:
                 for breaker_data in data["ResidentialBreaker"]:
                     if self._apply_breaker_ws_update(breaker_data):
-                        updated = True
+                        breaker_ids.append(breaker_data.get("id", "?"))
 
             # Check for child CT updates
             if "IotCt" in data:
@@ -616,7 +618,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                                 ct_data, self.data.cts[ct_key]
                             )
                             self.data.cts[ct_key].update(ct_data)
-                            updated = True
+                            ct_ids.append(ct_key)
 
             # WHEM own property updates (exclude child arrays)
             whem_data = {
@@ -626,14 +628,14 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             }
             if whem_data and str(model_id) in self.data.whems:
                 self.data.whems[str(model_id)].update(whem_data)
-                updated = True
+                hub_updated = True
 
         elif model_name == "ResidentialBreakerPanel":
             # Check for child breaker updates
             if "ResidentialBreaker" in data:
                 for breaker_data in data["ResidentialBreaker"]:
                     if self._apply_breaker_ws_update(breaker_data):
-                        updated = True
+                        breaker_ids.append(breaker_data.get("id", "?"))
 
             # Panel own property updates
             panel_data = {
@@ -641,22 +643,32 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             }
             if panel_data and str(model_id) in self.data.panels:
                 self.data.panels[str(model_id)].update(panel_data)
-                updated = True
+                hub_updated = True
 
         elif model_name == "ResidentialBreaker":
             # Direct breaker update — data IS the breaker payload
             data["id"] = str(model_id)
             if self._apply_breaker_ws_update(data):
-                updated = True
+                breaker_ids.append(str(model_id))
 
         elif model_name == "IotCt":
             ct_key = str(model_id)
             if ct_key in self.data.cts:
                 self._accumulate_ct_energy(data, self.data.cts[ct_key])
                 self.data.cts[ct_key].update(data)
-                updated = True
+                ct_ids.append(ct_key)
 
-        if updated:
+        if breaker_ids or ct_ids or hub_updated:
+            parts = [f"{model_name} {model_id}"]
+            if hub_updated:
+                parts.append("hub(%s)" % ", ".join(
+                    k for k in data if k not in ("ResidentialBreaker", "IotCt")
+                ))
+            if breaker_ids:
+                parts.append("breakers(%s)" % " ".join(breaker_ids))
+            if ct_ids:
+                parts.append("CTs(%s)" % " ".join(ct_ids))
+            LOGGER.debug("WS update: %s", ", ".join(parts))
             self.async_set_updated_data(self.data)
 
     @callback
