@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -78,6 +79,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         )
         self.client = client
         self.ws: LevitonWebSocket | None = None
+        self._last_ws_notification: float = 0.0
         self._residence_ids: list[int] = []
         self._ws_remove_notification: Any = None
         self._ws_remove_disconnect: Any = None
@@ -343,6 +345,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             self.ws = None
             return
 
+        # Reset staleness clock on new connection
+        self._last_ws_notification = time.monotonic()
+
         # Register callbacks
         self._ws_remove_notification = self.ws.on_notification(
             self._handle_ws_notification
@@ -513,6 +518,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
     @callback
     def _handle_ws_notification(self, notification: dict[str, Any]) -> None:
         """Process a WebSocket push notification."""
+        self._last_ws_notification = time.monotonic()
         model_name = notification.get("modelName", "")
         model_id = notification.get("modelId")
         data = notification.get("data", {})
@@ -610,19 +616,31 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         )
 
     async def _async_update_data(self) -> LevitonData:
-        """Fallback REST polling - only runs when WebSocket is disconnected.
+        """Periodic REST polling - runs as fallback or staleness recovery.
 
-        TODO: Consider removing REST fallback entirely. The official Leviton app
-        does not do periodic REST polling at all -- it relies purely on WebSocket
-        push. REST data calls in the app are only triggered by user navigation.
-        If WebSocket is truly unavailable, entities going unavailable via the
-        coordinator is the correct UX. See API_BANDWIDTH.md for full analysis.
+        Normally WebSocket push keeps data fresh. This runs every 10 minutes
+        and skips if WS delivered a notification recently. If WS appears
+        connected but hasn't delivered data in 3+ minutes, treat it as stale
+        and do a REST poll + trigger reconnection.
         """
         if self.ws is not None:
-            LOGGER.debug("WebSocket connected, skipping REST poll")
-            return self.data
+            silence = time.monotonic() - self._last_ws_notification
+            if self._last_ws_notification > 0 and silence > 180:
+                LOGGER.warning(
+                    "WebSocket silent for %d seconds, forcing REST poll "
+                    "and reconnecting",
+                    int(silence),
+                )
+                self.config_entry.async_create_background_task(
+                    self.hass,
+                    self._reconnect_websocket(),
+                    "leviton_ws_reconnect",
+                )
+            else:
+                LOGGER.debug("WebSocket connected, skipping REST poll")
+                return self.data
 
-        LOGGER.debug("WebSocket disconnected, running REST fallback poll")
+        LOGGER.debug("Running REST poll")
         try:
             # Refresh WHEM hubs and their children
             for whem_id in list(self.data.whems):
