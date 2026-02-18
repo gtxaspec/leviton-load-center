@@ -550,7 +550,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         if self._ws_remove_disconnect:
             self._ws_remove_disconnect()
 
-        # Disable bandwidth on all hubs
+        # Disable bandwidth on all hubs (data may be None if setup failed early)
+        if self.data is None:
+            return
         for panel_id in self.data.panels:
             try:
                 await self.client.set_panel_bandwidth(panel_id, enabled=False)
