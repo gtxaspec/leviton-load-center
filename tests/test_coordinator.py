@@ -542,37 +542,49 @@ async def test_async_update_data_ws_connected_skips_poll(
     mock_client.get_whem.assert_not_called()
 
 
-async def test_async_update_data_ws_stale_forces_poll_and_reconnect(
+async def test_ws_watchdog_forces_reconnect_on_silence(
     hass, mock_client
 ) -> None:
-    """Test stale WS (silent >180s) forces REST poll and triggers reconnect."""
+    """Test watchdog forces reconnect when WS is silent for 90+ seconds."""
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
-    whem = deepcopy(MOCK_WHEM)
-    breaker = deepcopy(MOCK_BREAKER_GEN1)
-    coordinator.data = LevitonData(
-        whems={whem.id: whem},
-        breakers={breaker.id: breaker},
-    )
+    coordinator.data = LevitonData()
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
     coordinator.ws = mock_ws
-    # Simulate last notification >180s ago
-    coordinator._last_ws_notification = time.monotonic() - 300
+    # Simulate last notification >90s ago
+    coordinator._last_ws_notification = time.monotonic() - 120
 
-    result = await coordinator._async_update_data()
+    await coordinator._async_ws_watchdog(None)
 
-    # Stale WS was disconnected before reconnecting
+    # Stale WS was disconnected
     mock_ws.disconnect.assert_called_once()
     assert coordinator.ws is None
-    # REST poll was executed (whem was refreshed)
-    mock_client.get_whem.assert_called_once_with(whem.id)
     # Reconnection was triggered
     entry.async_create_background_task.assert_called_once()
     # Close the leaked coroutine
     coro = entry.async_create_background_task.call_args[0][1]
     coro.close()
-    assert result is coordinator.data
+
+
+async def test_ws_watchdog_no_action_when_fresh(
+    hass, mock_client
+) -> None:
+    """Test watchdog does nothing when WS data is recent."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData()
+    mock_ws = MagicMock()
+    mock_ws.disconnect = AsyncMock()
+    coordinator.ws = mock_ws
+    # Recent notification
+    coordinator._last_ws_notification = time.monotonic() - 10
+
+    await coordinator._async_ws_watchdog(None)
+
+    # WS was not touched
+    mock_ws.disconnect.assert_not_called()
+    assert coordinator.ws is mock_ws
 
 
 # --- calc_daily_energy tests ---

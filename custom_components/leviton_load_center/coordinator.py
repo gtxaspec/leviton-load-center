@@ -24,7 +24,10 @@ from aioleviton import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_track_time_change,
+    async_track_time_interval,
+)
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
@@ -86,6 +89,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self._ws_remove_notification: Callable[[], None] | None = None
         self._ws_remove_disconnect: Callable[[], None] | None = None
         self._midnight_unsub: Callable[[], None] | None = None
+        self._keepalive_unsub: Callable[[], None] | None = None
+        self._watchdog_unsub: Callable[[], None] | None = None
+        self._bandwidth_unsub: Callable[[], None] | None = None
         self._baseline_store = Store[dict[str, float]](
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.daily_baselines"
         )
@@ -458,6 +464,95 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         # The app re-sends every ~25s, but we haven't observed bandwidth
         # dropping back to 0 on its own -- avoid unnecessary API calls.
 
+        # Start periodic API keepalive to prevent server-side session timeout.
+        # The Leviton server drops WS push after ~60 min of API inactivity.
+        self._start_keepalive()
+
+    @callback
+    def _start_keepalive(self) -> None:
+        """Schedule periodic WS reconnection, silence watchdog, and bandwidth keepalive.
+
+        The Leviton server hard-kills WS push notifications after exactly
+        60 minutes regardless of any REST API activity. Neither bandwidth
+        PUTs nor /apiversion polling prevent this (confirmed via 57-hour
+        traffic capture of the official app which has the same problem).
+
+        Three mechanisms:
+        1. Proactive reconnect every 55 minutes (before the 60-min cutoff).
+        2. Silence watchdog every 30 seconds — if no WS data for 90 seconds,
+           force an immediate reconnect (catches silent connection drops).
+        3. Bandwidth PUT every 60 seconds for WHEMs — keeps CTs pushing
+           data at high frequency. Without this, CTs only update every
+           2-12 minutes after bandwidth auto-reverts from 1 to 2.
+        """
+        self._stop_keepalive()
+        self._keepalive_unsub = async_track_time_interval(
+            self.hass, self._async_ws_refresh, timedelta(minutes=55)
+        )
+        self._watchdog_unsub = async_track_time_interval(
+            self.hass, self._async_ws_watchdog, timedelta(seconds=30)
+        )
+        if self.data.whems:
+            self._bandwidth_unsub = async_track_time_interval(
+                self.hass, self._async_bandwidth_keepalive, timedelta(seconds=60)
+            )
+
+    @callback
+    def _stop_keepalive(self) -> None:
+        """Stop periodic WS refresh, watchdog, and bandwidth keepalive."""
+        if self._keepalive_unsub:
+            self._keepalive_unsub()
+            self._keepalive_unsub = None
+        if self._watchdog_unsub:
+            self._watchdog_unsub()
+            self._watchdog_unsub = None
+        if self._bandwidth_unsub:
+            self._bandwidth_unsub()
+            self._bandwidth_unsub = None
+
+    async def _async_ws_refresh(self, _now: Any) -> None:
+        """Proactively reconnect WS before the 60-minute server timeout."""
+        if self.ws is None:
+            return
+        LOGGER.debug("Proactive WS refresh (55-min cycle)")
+        await self.ws.disconnect()
+        self.ws = None
+        self._ws_remove_notification = None
+        self._ws_remove_disconnect = None
+        await self._connect_websocket()
+
+    async def _async_ws_watchdog(self, _now: Any) -> None:
+        """Force reconnect if WS has been silent for 90+ seconds."""
+        if self.ws is None or self._reconnecting:
+            return
+        silence = time.monotonic() - self._last_ws_notification
+        if silence < 90:
+            return
+        LOGGER.warning(
+            "WS silent for %d seconds, forcing reconnect", int(silence)
+        )
+        await self.ws.disconnect()
+        self.ws = None
+        self._ws_remove_notification = None
+        self._ws_remove_disconnect = None
+        self._stop_keepalive()
+        if not self._reconnecting:
+            self.config_entry.async_create_background_task(
+                self.hass,
+                self._reconnect_websocket(),
+                "leviton_ws_reconnect",
+            )
+
+    async def _async_bandwidth_keepalive(self, _now: Any) -> None:
+        """Send bandwidth=1 to WHEMs to keep CTs pushing at high frequency."""
+        if self.ws is None:
+            return
+        for whem_id in self.data.whems:
+            try:
+                await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
+            except LevitonConnectionError:
+                LOGGER.debug("Bandwidth keepalive failed for WHEM %s", whem_id)
+
     @staticmethod
     def _needs_individual_breaker_subs(whem: Whem) -> bool:
         """Check if a WHEM needs individual breaker subscriptions.
@@ -678,6 +773,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self.ws = None
         self._ws_remove_notification = None
         self._ws_remove_disconnect = None
+        self._stop_keepalive()
         if not self._reconnecting:
             self.config_entry.async_create_background_task(
                 self.hass,
@@ -686,36 +782,15 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             )
 
     async def _async_update_data(self) -> LevitonData:
-        """Periodic REST polling - runs as fallback or staleness recovery.
+        """Periodic REST polling - runs as fallback when WS is down.
 
         Normally WebSocket push keeps data fresh. This runs every 10 minutes
-        and skips if WS delivered a notification recently. If WS appears
-        connected but hasn't delivered data in 3+ minutes, treat it as stale
-        and do a REST poll + trigger reconnection.
+        and skips if WS is connected (the watchdog handles silent-WS
+        detection and reconnection separately).
         """
         if self.ws is not None:
-            silence = time.monotonic() - self._last_ws_notification
-            if self._last_ws_notification > 0 and silence > 180:
-                LOGGER.warning(
-                    "WebSocket silent for %d seconds, forcing REST poll "
-                    "and reconnecting",
-                    int(silence),
-                )
-                # Disconnect the stale WS before reconnecting to avoid
-                # leaking the old connection and its listen task.
-                await self.ws.disconnect()
-                self.ws = None
-                self._ws_remove_notification = None
-                self._ws_remove_disconnect = None
-                if not self._reconnecting:
-                    self.config_entry.async_create_background_task(
-                        self.hass,
-                        self._reconnect_websocket(),
-                        "leviton_ws_reconnect",
-                    )
-            else:
-                LOGGER.debug("WebSocket connected, skipping REST poll")
-                return self.data
+            LOGGER.debug("WebSocket connected, skipping REST poll")
+            return self.data
 
         LOGGER.debug("Running REST poll")
         try:
@@ -819,6 +894,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         if self._ws_remove_disconnect:
             self._ws_remove_disconnect()
             self._ws_remove_disconnect = None
+        self._stop_keepalive()
 
         # Disable bandwidth on all hubs (data may be None if setup failed early)
         if self.data is None:
