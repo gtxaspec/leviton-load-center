@@ -124,6 +124,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 await client.login(self._email, self._password)
             except LevitonTwoFactorRequired:
+                LOGGER.debug("2FA required for %s", self._email)
                 self._client = client
                 return await self.async_step_2fa()
             except LevitonConnectionError as err:
@@ -333,6 +334,7 @@ class LevitonOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Manage Leviton options."""
         if user_input is not None:
+            LOGGER.debug("Options updated: %s", user_input)
             return self.async_create_entry(data=user_input)
 
         return self.async_show_form(

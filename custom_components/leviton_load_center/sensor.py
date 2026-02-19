@@ -31,6 +31,7 @@ from .const import (
     CONF_VOLTAGE_208,
     DEFAULT_CALCULATED_CURRENT,
     DEFAULT_VOLTAGE_208,
+    LOGGER,
     VOLTAGE_120,
     VOLTAGE_208,
     VOLTAGE_240,
@@ -375,10 +376,6 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         value_fn=_calc_current,
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
     ),
-    # NOTE: Daily energy is derived locally from lifetime_energy minus a midnight
-    # baseline (persisted via HA Store). HA's Energy Dashboard and utility_meter
-    # helper can also derive daily energy from the lifetime_energy sensor
-    # (TOTAL_INCREASING) natively. Consider removing this if redundant.
     LevitonBreakerSensorDescription(
         key="energy",
         translation_key="energy",
@@ -1001,6 +998,7 @@ async def async_setup_entry(
                 LevitonPanelSensor(coordinator, desc, panel_id, dev_info)
             )
 
+    LOGGER.debug("Sensor platform: created %d entities", len(entities))
     async_add_entities(entities)
 
 

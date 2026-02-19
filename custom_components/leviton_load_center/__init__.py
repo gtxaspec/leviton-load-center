@@ -80,6 +80,7 @@ async def async_setup_entry(
 
     entry.async_on_unload(entry.add_update_listener(_async_update_options))
 
+    LOGGER.debug("Setup complete for %s", entry.data.get(CONF_EMAIL))
     return True
 
 
@@ -87,6 +88,7 @@ async def _async_update_options(
     hass: HomeAssistant, entry: LevitonConfigEntry
 ) -> None:
     """Reload the integration when options change."""
+    LOGGER.debug("Options changed, reloading integration")
     await hass.config_entries.async_reload(entry.entry_id)
 
 

@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN
+from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import (
     LevitonEntity,
@@ -39,6 +39,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Leviton button entities."""
     if entry.options.get(CONF_READ_ONLY, DEFAULT_READ_ONLY):
+        LOGGER.debug("Button platform: read-only mode, skipping")
         return
 
     coordinator = entry.runtime_data.coordinator
@@ -67,6 +68,7 @@ async def async_setup_entry(
             )
         )
 
+    LOGGER.debug("Button platform: created %d entities", len(entities))
     async_add_entities(entities)
 
 
@@ -77,6 +79,7 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Trip the breaker."""
+        LOGGER.debug("Tripping breaker %s", self._device_id)
         try:
             await self.coordinator.client.trip_breaker(self._device_id)
         except LevitonConnectionError as err:
@@ -104,6 +107,7 @@ class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Blink the WHEM LED."""
+        LOGGER.debug("Identifying WHEM %s", self._device_id)
         try:
             await self.coordinator.client.identify_whem(self._device_id)
         except LevitonConnectionError as err:

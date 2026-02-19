@@ -908,13 +908,13 @@ async def test_async_setup_full_flow(
     mock_websocket.connect.assert_called_once()
     # Subscribed to WHEM + panel at minimum
     assert mock_websocket.subscribe.call_count >= 2
-    # Bandwidth was set for WHEM and panel
-    mock_client.set_whem_bandwidth.assert_called_once_with(
-        MOCK_WHEM.id, bandwidth=1
-    )
-    mock_client.set_panel_bandwidth.assert_called_once_with(
-        MOCK_PANEL.id, enabled=True
-    )
+    # Bandwidth reset (discovery) then enabled (WS connect)
+    assert mock_client.set_whem_bandwidth.call_count == 2
+    mock_client.set_whem_bandwidth.assert_any_call(MOCK_WHEM.id, bandwidth=0)
+    mock_client.set_whem_bandwidth.assert_any_call(MOCK_WHEM.id, bandwidth=1)
+    assert mock_client.set_panel_bandwidth.call_count == 2
+    mock_client.set_panel_bandwidth.assert_any_call(MOCK_PANEL.id, enabled=False)
+    mock_client.set_panel_bandwidth.assert_any_call(MOCK_PANEL.id, enabled=True)
 
     # 3. Daily baselines snapshotted (first run, no stored data)
     assert len(coordinator.data.daily_baselines) > 0

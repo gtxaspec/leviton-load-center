@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import LevitonEntity, panel_device_info, whem_device_info
 
@@ -49,6 +50,7 @@ async def async_setup_entry(
             )
         )
 
+    LOGGER.debug("Binary sensor platform: created %d entities", len(entities))
     async_add_entities(entities)
 
 

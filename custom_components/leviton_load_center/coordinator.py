@@ -165,6 +165,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 cached_val = stored.get(cache_key)
                 if cached_val is not None and rest_val < cached_val * 0.5:
                     corrected = round(cached_val + rest_val, 3)
+                    LOGGER.debug(
+                        "Energy correction ct_%s/%s: REST=%s (delta), "
+                        "cached=%s, corrected=%s",
+                        ct_id, attr, rest_val, cached_val, corrected,
+                    )
                     setattr(ct, attr, corrected)
                     stored[cache_key] = corrected
                     changed = True
@@ -180,7 +185,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         stored = await self._baseline_store.async_load()
         if stored:
             self.data.daily_baselines = stored
+            LOGGER.debug("Loaded %d daily baselines from storage", len(stored))
         else:
+            LOGGER.debug("No stored baselines, snapshotting current values")
             self._snapshot_daily_baselines()
             await self._baseline_store.async_save(self.data.daily_baselines)
 
@@ -201,6 +208,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
     async def _async_handle_midnight(self, _now: Any) -> None:
         """Reset daily energy baselines at midnight and persist."""
+        LOGGER.debug("Midnight reset: snapshotting daily energy baselines")
         self._snapshot_daily_baselines()
         await self._baseline_store.async_save(self.data.daily_baselines)
         await self._save_lifetime_energy()
@@ -240,6 +248,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         """
         prev = self._energy_high_water.get(key)
         if prev is not None and value < prev:
+            LOGGER.debug(
+                "Clamped decreasing energy %s: %s -> %s", key, value, prev
+            )
             return prev
         self._energy_high_water[key] = value
         return value
@@ -317,6 +328,17 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     "  WHEM %s: %s (FW %s)", whem.id, whem.name, whem.version
                 )
                 self.data.whems[whem.id] = whem
+                # Reset bandwidth before fetching breakers/CTs to ensure
+                # REST API returns lifetime energy (not deltas from a
+                # previous session that left bandwidth=1 active).
+                # Brief delay lets the WHEM process the change.
+                try:
+                    await self.client.set_whem_bandwidth(whem.id, bandwidth=0)
+                    await asyncio.sleep(2)
+                except LevitonConnectionError:
+                    LOGGER.debug(
+                        "Failed to reset bandwidth for WHEM %s", whem.id
+                    )
                 # Get breakers for this WHEM
                 try:
                     breakers = await self.client.get_whem_breakers(whem.id)
@@ -367,6 +389,16 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     panel.id, panel.name, panel.package_ver,
                 )
                 self.data.panels[panel.id] = panel
+                # Reset bandwidth before fetching breakers
+                try:
+                    await self.client.set_panel_bandwidth(
+                        panel.id, enabled=False
+                    )
+                    await asyncio.sleep(2)
+                except LevitonConnectionError:
+                    LOGGER.debug(
+                        "Failed to reset bandwidth for panel %s", panel.id
+                    )
                 # Get breakers for this panel
                 try:
                     breakers = await self.client.get_panel_breakers(panel.id)
@@ -399,9 +431,14 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             self.ws = self.client.create_websocket()
             await self.ws.connect()
         except LevitonConnectionError:
-            LOGGER.warning("WebSocket connection failed, using REST polling only")
+            LOGGER.warning(
+                "WebSocket connection failed, using REST polling only",
+                exc_info=True,
+            )
             self.ws = None
             return
+
+        LOGGER.debug("WebSocket connected")
 
         # Reset staleness clock on new connection
         self._last_ws_notification = time.monotonic()
@@ -455,7 +492,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 try:
                     await self.ws.subscribe("ResidentialBreaker", breaker_id)
                 except LevitonConnectionError:
-                    LOGGER.debug(
+                    LOGGER.warning(
                         "Failed to subscribe to breaker %s", breaker_id
                     )
 
@@ -559,7 +596,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             try:
                 await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
             except LevitonConnectionError:
-                LOGGER.debug("Bandwidth keepalive failed for WHEM %s", whem_id)
+                LOGGER.warning("Bandwidth keepalive failed for WHEM %s", whem_id)
 
     @staticmethod
     def _needs_individual_breaker_subs(whem: Whem) -> bool:
@@ -576,6 +613,10 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             parts = tuple(int(x) for x in whem.version.split("."))
             return parts >= (2, 0, 0)
         except (ValueError, AttributeError):
+            LOGGER.debug(
+                "Could not parse WHEM FW version '%s', assuming >=2.0.0",
+                whem.version,
+            )
             return True  # Assume newest FW if unparseable
 
     @callback
@@ -633,8 +674,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         not the lifetime total that the REST API returns. We accumulate deltas
         onto the current lifetime value so sensors stay correct.
 
-        Safety: if the WS value exceeds the current lifetime, it cannot be a
-        delta and is treated as a lifetime replacement (left as-is).
+        Safety: if the WS value is large relative to the current lifetime
+        (>50% of current), it's a full lifetime value from a state flood,
+        not a delta. Leave it as-is (lifetime replacement).
         """
         for ws_key, attr in (
             ("energyConsumption", "energy_consumption"),
@@ -644,9 +686,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             delta = breaker_data.get(ws_key)
             if delta is not None:
                 current = getattr(breaker, attr) or 0
-                if current > 0 and delta > current:
-                    continue
-                breaker_data[ws_key] = round(current + delta, 3)
+                if current > 0 and delta > current * 0.5:
+                    # State flood — keep the higher of REST and WS lifetimes
+                    breaker_data[ws_key] = round(max(delta, current), 3)
+                else:
+                    breaker_data[ws_key] = round(current + delta, 3)
 
     @staticmethod
     def _accumulate_ct_energy(
@@ -654,8 +698,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
     ) -> None:
         """Convert WS energy deltas to accumulated lifetime values for CTs.
 
-        Safety: if the WS value exceeds the current lifetime, it cannot be a
-        delta and is treated as a lifetime replacement (left as-is).
+        Safety: if the WS value is large relative to the current lifetime
+        (>50% of current), it's a full lifetime value from a state flood,
+        not a delta. Leave it as-is (lifetime replacement).
         """
         for ws_key, attr in (
             ("energyConsumption", "energy_consumption"),
@@ -666,9 +711,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             delta = ct_data.get(ws_key)
             if delta is not None:
                 current = getattr(ct, attr) or 0
-                if current > 0 and delta > current:
-                    continue
-                ct_data[ws_key] = round(current + delta, 3)
+                if current > 0 and delta > current * 0.5:
+                    # State flood — keep the higher of REST and WS lifetimes
+                    ct_data[ws_key] = round(max(delta, current), 3)
+                else:
+                    ct_data[ws_key] = round(current + delta, 3)
 
     def _apply_breaker_ws_update(
         self, breaker_data: dict[str, Any]
@@ -697,6 +744,10 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         data = notification.get("data", {})
 
         if not data or model_id is None:
+            LOGGER.debug(
+                "WS notification dropped: empty data or no modelId (modelName=%s)",
+                model_name,
+            )
             return
 
         breaker_ids: list[str] = []
@@ -761,6 +812,13 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 self.data.cts[ct_key].update(data)
                 ct_ids.append(ct_key)
 
+        else:
+            LOGGER.debug(
+                "WS notification ignored: unknown model %s/%s",
+                model_name, model_id,
+            )
+            return
+
         if breaker_ids or ct_ids or hub_updated:
             parts = [f"{model_name} {model_id}"]
             if hub_updated:
@@ -797,7 +855,6 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         detection and reconnection separately).
         """
         if self.ws is not None:
-            LOGGER.debug("WebSocket connected, skipping REST poll")
             return self.data
 
         LOGGER.debug("Running REST poll")
@@ -892,6 +949,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
     async def async_shutdown(self) -> None:
         """Clean up WebSocket and bandwidth settings."""
+        LOGGER.debug("Shutting down coordinator")
         await super().async_shutdown()
 
         # Clean up notification callbacks (idempotent — may be called twice

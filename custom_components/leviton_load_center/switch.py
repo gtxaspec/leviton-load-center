@@ -12,7 +12,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN
+from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
 from .coordinator import LevitonConfigEntry
 from .entity import LevitonEntity, breaker_device_info, should_include_breaker
 
@@ -36,6 +36,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Leviton switch entities."""
     if entry.options.get(CONF_READ_ONLY, DEFAULT_READ_ONLY):
+        LOGGER.debug("Switch platform: read-only mode, skipping")
         return
 
     coordinator = entry.runtime_data.coordinator
@@ -62,6 +63,7 @@ async def async_setup_entry(
             )
         )
 
+    LOGGER.debug("Switch platform: created %d entities", len(entities))
     async_add_entities(entities)
 
 
@@ -87,6 +89,7 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the breaker."""
+        LOGGER.debug("Turning on breaker %s", self._device_id)
         try:
             await self.coordinator.client.turn_on_breaker(self._device_id)
         except LevitonConnectionError as err:
@@ -107,6 +110,7 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the breaker."""
+        LOGGER.debug("Turning off breaker %s", self._device_id)
         try:
             await self.coordinator.client.turn_off_breaker(self._device_id)
         except LevitonConnectionError as err:
@@ -139,6 +143,7 @@ class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Start blinking the breaker LED."""
+        LOGGER.debug("Identify on for breaker %s", self._device_id)
         try:
             await self.coordinator.client.blink_led(self._device_id)
         except LevitonConnectionError as err:
@@ -157,6 +162,7 @@ class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Stop blinking the breaker LED."""
+        LOGGER.debug("Identify off for breaker %s", self._device_id)
         try:
             await self.coordinator.client.stop_blink_led(self._device_id)
         except LevitonConnectionError as err:
