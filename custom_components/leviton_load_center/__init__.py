@@ -1,4 +1,4 @@
-"""The Leviton integration."""
+"""The Leviton Load Center integration."""
 
 from __future__ import annotations
 

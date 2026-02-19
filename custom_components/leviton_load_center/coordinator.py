@@ -515,10 +515,14 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         if self.ws is None:
             return
         LOGGER.debug("Proactive WS refresh (55-min cycle)")
+        # Remove disconnect callback before disconnecting to prevent
+        # _handle_ws_disconnect from also triggering a reconnect.
+        if self._ws_remove_disconnect:
+            self._ws_remove_disconnect()
+        self._ws_remove_disconnect = None
+        self._ws_remove_notification = None
         await self.ws.disconnect()
         self.ws = None
-        self._ws_remove_notification = None
-        self._ws_remove_disconnect = None
         await self._connect_websocket()
 
     async def _async_ws_watchdog(self, _now: Any) -> None:
@@ -531,10 +535,14 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         LOGGER.warning(
             "WS silent for %d seconds, forcing reconnect", int(silence)
         )
+        # Remove disconnect callback before disconnecting to prevent
+        # _handle_ws_disconnect from also triggering a reconnect.
+        if self._ws_remove_disconnect:
+            self._ws_remove_disconnect()
+        self._ws_remove_disconnect = None
+        self._ws_remove_notification = None
         await self.ws.disconnect()
         self.ws = None
-        self._ws_remove_notification = None
-        self._ws_remove_disconnect = None
         self._stop_keepalive()
         if not self._reconnecting:
             self.config_entry.async_create_background_task(

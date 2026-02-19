@@ -3,7 +3,7 @@
   "name": "Leviton Load Center",
   "codeowners": ["@gtxaspec"],
   "config_flow": true,
-  "documentation": "https://www.home-assistant.io/integrations/leviton",
+  "documentation": "https://github.com/gtxaspec/leviton-load-center",
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "quality_scale": "platinum",
