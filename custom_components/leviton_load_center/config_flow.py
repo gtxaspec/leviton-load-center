@@ -355,6 +355,18 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         return self._show_2fa_form("2fa_reconfigure", errors)
 
 
+OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_VOLTAGE_208, default=DEFAULT_VOLTAGE_208): bool,
+        vol.Optional(CONF_READ_ONLY, default=DEFAULT_READ_ONLY): bool,
+        vol.Optional(
+            CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT
+        ): bool,
+        vol.Optional(CONF_HIDE_DUMMY, default=DEFAULT_HIDE_DUMMY): bool,
+    }
+)
+
+
 class LevitonOptionsFlow(OptionsFlow):
     """Handle Leviton options."""
 
@@ -369,33 +381,7 @@ class LevitonOptionsFlow(OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_VOLTAGE_208,
-                        default=self.config_entry.options.get(
-                            CONF_VOLTAGE_208, DEFAULT_VOLTAGE_208
-                        ),
-                    ): bool,
-                    vol.Optional(
-                        CONF_READ_ONLY,
-                        default=self.config_entry.options.get(
-                            CONF_READ_ONLY, DEFAULT_READ_ONLY
-                        ),
-                    ): bool,
-                    vol.Optional(
-                        CONF_CALCULATED_CURRENT,
-                        default=self.config_entry.options.get(
-                            CONF_CALCULATED_CURRENT,
-                            DEFAULT_CALCULATED_CURRENT,
-                        ),
-                    ): bool,
-                    vol.Optional(
-                        CONF_HIDE_DUMMY,
-                        default=self.config_entry.options.get(
-                            CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY
-                        ),
-                    ): bool,
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                OPTIONS_SCHEMA, self.config_entry.options
             ),
         )

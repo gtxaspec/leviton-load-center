@@ -81,34 +81,43 @@ def _breaker_power(breaker: Breaker) -> int | None:
 
 
 _BREAKER_STATUS_MAP: dict[str, str] = {
-    "ManualON": "On",
-    "ManualOFF": "Off",
-    "COMMUNICATING": "Connecting",
-    "NotCommunicating": "Offline",
-    "CommunicationFailure": "Offline",
-    "UNDEFINED": "Offline",
-    "SoftwareTrip": "Software Trip",
-    "GFCIFault": "GFCI Fault",
-    "AFCIMiswire": "AFCI Miswire",
-    "AFCIParallelFault": "AFCI Fault",
-    "AFCISerialArc5AFault": "AFCI Fault",
-    "AFCISerialArc10AFault": "AFCI Fault",
-    "AFCISerialArc15AFault": "AFCI Fault",
-    "AFCISerialArc20AFault": "AFCI Fault",
-    "AFCISerialArc30AFault": "AFCI Fault",
-    "OverCurrentTripPhase1": "Overcurrent Trip",
-    "OverCurrentTripPhase2": "Overcurrent Trip",
-    "OverloadTrip": "Overload Trip",
-    "ShortCircuitTrip": "Short Circuit Trip",
-    "UpstreamFault": "Upstream Fault",
+    "ManualON": "on",
+    "ManualOFF": "off",
+    "COMMUNICATING": "connecting",
+    "NotCommunicating": "offline",
+    "CommunicationFailure": "offline",
+    "UNDEFINED": "offline",
+    "SoftwareTrip": "software_trip",
+    "GFCIFault": "gfci_fault",
+    "AFCIMiswire": "afci_miswire",
+    "AFCIParallelFault": "afci_fault",
+    "AFCISerialArc5AFault": "afci_fault",
+    "AFCISerialArc10AFault": "afci_fault",
+    "AFCISerialArc15AFault": "afci_fault",
+    "AFCISerialArc20AFault": "afci_fault",
+    "AFCISerialArc30AFault": "afci_fault",
+    "OverCurrentTripPhase1": "overcurrent_trip",
+    "OverCurrentTripPhase2": "overcurrent_trip",
+    "OverloadTrip": "overload_trip",
+    "ShortCircuitTrip": "short_circuit_trip",
+    "UpstreamFault": "upstream_fault",
 }
+
+BREAKER_STATUS_OPTIONS: list[str] = sorted(set(_BREAKER_STATUS_MAP.values()))
+
+REMOTE_STATUS_MAP: dict[str, str] = {
+    "RemoteON": "on",
+    "RemoteOFF": "off",
+}
+
+REMOTE_STATUS_OPTIONS: list[str] = sorted(REMOTE_STATUS_MAP.values())
 
 
 def _breaker_status(breaker: Breaker) -> str | None:
-    """Map raw currentState to a user-friendly display value."""
+    """Map raw currentState to an enum option key."""
     if breaker.current_state is None:
         return None
-    return _BREAKER_STATUS_MAP.get(breaker.current_state, breaker.current_state)
+    return _BREAKER_STATUS_MAP.get(breaker.current_state)
 
 
 def _breaker_energy(breaker: Breaker) -> float | None:
@@ -432,15 +441,17 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
     LevitonBreakerSensorDescription(
         key="breaker_status",
         translation_key="breaker_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=BREAKER_STATUS_OPTIONS,
         value_fn=lambda b, _d, _o: _breaker_status(b),
         exists_fn=lambda b: b.is_smart,
     ),
     LevitonBreakerSensorDescription(
         key="remote_status",
         translation_key="remote_status",
-        value_fn=lambda b, _d, _o: {"RemoteON": "On", "RemoteOFF": "Off"}.get(
-            b.remote_state or ""
-        ),
+        device_class=SensorDeviceClass.ENUM,
+        options=REMOTE_STATUS_OPTIONS,
+        value_fn=lambda b, _d, _o: REMOTE_STATUS_MAP.get(b.remote_state or ""),
         exists_fn=lambda b: b.is_gen2,
     ),
     # Diagnostics

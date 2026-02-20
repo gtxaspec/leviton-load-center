@@ -126,5 +126,16 @@ async def async_remove_config_entry_device(
     entry: LevitonConfigEntry,
     device_entry: DeviceEntry,
 ) -> bool:
-    """Allow manual removal of stale devices."""
+    """Allow manual removal of devices no longer in coordinator data."""
+    data = entry.runtime_data.coordinator.data
+    active_ids: set[str] = set()
+    active_ids.update(data.whems)
+    active_ids.update(data.panels)
+    active_ids.update(data.breakers)
+    active_ids.update(data.cts)
+
+    for identifier in device_entry.identifiers:
+        if identifier[0] == DOMAIN and identifier[1] in active_ids:
+            return False
+
     return True

@@ -202,16 +202,20 @@ class WebSocketManager:
         """
         self._stop_keepalive()
         hass = self.coordinator.hass
+        entry = self.coordinator.config_entry
         self._keepalive_unsub = async_track_time_interval(
             hass, self._async_ws_refresh, timedelta(minutes=55)
         )
+        entry.async_on_unload(self._keepalive_unsub)
         self._watchdog_unsub = async_track_time_interval(
             hass, self._async_ws_watchdog, timedelta(seconds=30)
         )
+        entry.async_on_unload(self._watchdog_unsub)
         if self.coordinator.data.whems:
             self._bandwidth_unsub = async_track_time_interval(
                 hass, self._async_bandwidth_keepalive, timedelta(seconds=60)
             )
+            entry.async_on_unload(self._bandwidth_unsub)
 
     @callback
     def _stop_keepalive(self) -> None:
