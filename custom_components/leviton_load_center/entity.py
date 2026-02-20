@@ -14,7 +14,7 @@ from .const import CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY, DOMAIN
 from .coordinator import LevitonCoordinator, LevitonData
 
 
-_BREAKER_OFFLINE_STATES = frozenset({
+BREAKER_OFFLINE_STATES = frozenset({
     "NotCommunicating", "CommunicationFailure", "UNDEFINED",
 })
 

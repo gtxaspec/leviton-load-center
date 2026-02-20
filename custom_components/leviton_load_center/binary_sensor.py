@@ -5,9 +5,9 @@ from __future__ import annotations
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
+    BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import LOGGER
@@ -16,7 +16,7 @@ from .entity import LevitonEntity, panel_device_info, whem_device_info
 
 PARALLEL_UPDATES = 0
 
-CONNECTIVITY_DESCRIPTION = EntityDescription(
+CONNECTIVITY_DESCRIPTION = BinarySensorEntityDescription(
     key="connectivity",
     translation_key="connectivity",
 )

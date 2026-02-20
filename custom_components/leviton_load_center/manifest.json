@@ -6,6 +6,7 @@
   "documentation": "https://github.com/gtxaspec/leviton-load-center",
   "integration_type": "hub",
   "iot_class": "cloud_push",
+  "loggers": ["aioleviton"],
   "quality_scale": "platinum",
   "requirements": ["aioleviton==0.2.7"],
   "version": "0.1.0"

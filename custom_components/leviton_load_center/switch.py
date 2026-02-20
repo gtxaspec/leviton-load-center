@@ -6,17 +6,20 @@ from typing import Any
 
 from aioleviton import LevitonConnectionError
 
-from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
+from homeassistant.components.switch import (
+    SwitchDeviceClass,
+    SwitchEntity,
+    SwitchEntityDescription,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
 from .coordinator import LevitonConfigEntry
 from .entity import (
+    BREAKER_OFFLINE_STATES,
     LevitonEntity,
-    _BREAKER_OFFLINE_STATES,
     breaker_device_info,
     should_include_breaker,
 )
@@ -43,12 +46,12 @@ _BREAKER_OFF_STATES = frozenset({
     "ShortCircuitTrip",
 })
 
-BREAKER_SWITCH_DESCRIPTION = EntityDescription(
+BREAKER_SWITCH_DESCRIPTION = SwitchEntityDescription(
     key="breaker",
     translation_key="breaker",
 )
 
-IDENTIFY_SWITCH_DESCRIPTION = EntityDescription(
+IDENTIFY_SWITCH_DESCRIPTION = SwitchEntityDescription(
     key="identify",
     translation_key="identify",
 )
@@ -105,7 +108,7 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
         breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return False
-        return breaker.current_state not in _BREAKER_OFFLINE_STATES
+        return breaker.current_state not in BREAKER_OFFLINE_STATES
 
     @property
     def is_on(self) -> bool | None:
@@ -181,7 +184,7 @@ class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
         breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return False
-        return breaker.current_state not in _BREAKER_OFFLINE_STATES
+        return breaker.current_state not in BREAKER_OFFLINE_STATES
 
     @property
     def is_on(self) -> bool | None:

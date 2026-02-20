@@ -4,17 +4,20 @@ from __future__ import annotations
 
 from aioleviton import LevitonConnectionError
 
-from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
+from homeassistant.components.button import (
+    ButtonDeviceClass,
+    ButtonEntity,
+    ButtonEntityDescription,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import (
+    BREAKER_OFFLINE_STATES,
     LevitonEntity,
-    _BREAKER_OFFLINE_STATES,
     breaker_device_info,
     should_include_breaker,
     whem_device_info,
@@ -22,12 +25,12 @@ from .entity import (
 
 PARALLEL_UPDATES = 1
 
-TRIP_BUTTON_DESCRIPTION = EntityDescription(
+TRIP_BUTTON_DESCRIPTION = ButtonEntityDescription(
     key="trip",
     translation_key="trip",
 )
 
-IDENTIFY_BUTTON_DESCRIPTION = EntityDescription(
+IDENTIFY_BUTTON_DESCRIPTION = ButtonEntityDescription(
     key="identify",
     translation_key="identify",
 )
@@ -76,7 +79,7 @@ async def async_setup_entry(
 class LevitonTripButton(LevitonEntity, ButtonEntity):
     """Button entity to trip a Gen 1 breaker."""
 
-    _attr_device_class = ButtonDeviceClass.RESTART
+    _attr_device_class = None
 
     @property
     def available(self) -> bool:
@@ -86,7 +89,7 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
         breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
             return False
-        return breaker.current_state not in _BREAKER_OFFLINE_STATES
+        return breaker.current_state not in BREAKER_OFFLINE_STATES
 
     async def async_press(self) -> None:
         """Trip the breaker."""
