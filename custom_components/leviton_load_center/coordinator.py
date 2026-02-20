@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -15,7 +13,6 @@ from aioleviton import (
     LevitonAuthError,
     LevitonClient,
     LevitonConnectionError,
-    LevitonWebSocket,
     Panel,
     Residence,
     Whem,
@@ -24,20 +21,22 @@ from aioleviton import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.event import (
-    async_track_time_change,
-    async_track_time_interval,
-)
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
 from .const import DOMAIN, LOGGER
-
-STORAGE_VERSION = 1
+from .energy import (
+    EnergyTracker,
+    accumulate_breaker_energy,
+    accumulate_ct_energy,
+    calc_daily_energy,
+    snapshot_daily_baselines,
+)
+from .websocket import WebSocketManager, needs_individual_breaker_subs
 
 type LevitonConfigEntry = ConfigEntry[LevitonRuntimeData]
 
@@ -67,6 +66,12 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
     config_entry: LevitonConfigEntry
 
+    # Static method re-exports for backward compat (tests call these)
+    _accumulate_breaker_energy = staticmethod(accumulate_breaker_energy)
+    _accumulate_ct_energy = staticmethod(accumulate_ct_energy)
+    calc_daily_energy = staticmethod(calc_daily_energy)
+    _needs_individual_breaker_subs = staticmethod(needs_individual_breaker_subs)
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -82,23 +87,109 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             update_interval=timedelta(minutes=10),
         )
         self.client = client
-        self.ws: LevitonWebSocket | None = None
-        self._last_ws_notification: float = 0.0
-        self._reconnecting: bool = False
         self._residence_ids: list[int] = []
-        self._ws_remove_notification: Callable[[], None] | None = None
-        self._ws_remove_disconnect: Callable[[], None] | None = None
-        self._midnight_unsub: Callable[[], None] | None = None
-        self._keepalive_unsub: Callable[[], None] | None = None
-        self._watchdog_unsub: Callable[[], None] | None = None
-        self._bandwidth_unsub: Callable[[], None] | None = None
-        self._baseline_store = Store[dict[str, float]](
-            hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.daily_baselines"
-        )
-        self._lifetime_store = Store[dict[str, float]](
-            hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.lifetime_energy"
-        )
-        self._energy_high_water: dict[str, float] = {}
+        self._midnight_unsub = None
+
+        # Delegated subsystems
+        self.energy = EnergyTracker(hass, entry.entry_id)
+        self.ws_manager = WebSocketManager(self)
+
+    # --- Proxy properties for backward compat (tests access these) ---
+
+    @property
+    def ws(self) -> Any:
+        """Proxy to ws_manager.ws."""
+        return self.ws_manager.ws
+
+    @ws.setter
+    def ws(self, value: Any) -> None:
+        self.ws_manager.ws = value
+
+    @property
+    def _last_ws_notification(self) -> float:
+        return self.ws_manager._last_ws_notification
+
+    @_last_ws_notification.setter
+    def _last_ws_notification(self, value: float) -> None:
+        self.ws_manager._last_ws_notification = value
+
+    @property
+    def _reconnecting(self) -> bool:
+        return self.ws_manager._reconnecting
+
+    @_reconnecting.setter
+    def _reconnecting(self, value: bool) -> None:
+        self.ws_manager._reconnecting = value
+
+    @property
+    def _ws_remove_notification(self) -> Any:
+        return self.ws_manager._ws_remove_notification
+
+    @_ws_remove_notification.setter
+    def _ws_remove_notification(self, value: Any) -> None:
+        self.ws_manager._ws_remove_notification = value
+
+    @property
+    def _ws_remove_disconnect(self) -> Any:
+        return self.ws_manager._ws_remove_disconnect
+
+    @_ws_remove_disconnect.setter
+    def _ws_remove_disconnect(self, value: Any) -> None:
+        self.ws_manager._ws_remove_disconnect = value
+
+    @property
+    def _lifetime_store(self) -> Any:
+        return self.energy._lifetime_store
+
+    @_lifetime_store.setter
+    def _lifetime_store(self, value: Any) -> None:
+        self.energy._lifetime_store = value
+
+    # --- Delegation methods (tests call these on coordinator) ---
+
+    async def _connect_websocket(self) -> None:
+        await self.ws_manager.connect()
+
+    @callback
+    def _handle_ws_notification(self, notification: dict[str, Any]) -> None:
+        self.ws_manager._handle_ws_notification(notification)
+
+    @callback
+    def _handle_ws_disconnect(self) -> None:
+        self.ws_manager._handle_ws_disconnect()
+
+    async def _async_ws_watchdog(self, _now: Any = None) -> None:
+        await self.ws_manager._async_ws_watchdog(_now)
+
+    async def _async_ws_refresh(self, _now: Any = None) -> None:
+        await self.ws_manager._async_ws_refresh(_now)
+
+    async def _async_bandwidth_keepalive(self, _now: Any = None) -> None:
+        await self.ws_manager._async_bandwidth_keepalive(_now)
+
+    def _apply_breaker_ws_update(self, breaker_data: dict[str, Any]) -> bool:
+        return self.ws_manager._apply_breaker_ws_update(breaker_data)
+
+    async def _reconnect_websocket(self) -> None:
+        await self.ws_manager._reconnect()
+
+    async def _correct_energy_values(self) -> None:
+        await self.energy.correct_energy_values(self.data)
+
+    async def _load_daily_baselines(self) -> None:
+        await self.energy.load_daily_baselines(self.data)
+
+    async def _save_lifetime_energy(self) -> None:
+        await self.energy.save_lifetime_energy(self.data)
+
+    @callback
+    def _snapshot_daily_baselines(self) -> None:
+        snapshot_daily_baselines(self.data)
+
+    def clamp_increasing(self, key: str, value: float) -> float:
+        return self.energy.clamp_increasing(key, value)
+
+    # --- Core coordinator logic ---
 
     async def _async_setup(self) -> None:
         """Discover devices and connect WebSocket on first refresh."""
@@ -112,161 +203,10 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         )
         self.config_entry.async_on_unload(self._midnight_unsub)
 
-    async def _correct_energy_values(self) -> None:
-        """Detect and correct delta energy values from the REST API.
-
-        When bandwidth=1 (streaming mode), the WHEM reports energyConsumption
-        as a period delta instead of the lifetime total. This can happen on
-        restart if the previous session left bandwidth=1 active.
-
-        We detect this by comparing REST values against cached lifetime values.
-        If the REST value is significantly smaller, it's a delta and we correct
-        it by adding it to the cached lifetime.
-        """
-        stored: dict[str, float] = await self._lifetime_store.async_load() or {}
-        changed = False
-
-        for breaker_id, breaker in self.data.breakers.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-            ):
-                rest_val = getattr(breaker, attr)
-                if rest_val is None:
-                    continue
-                cache_key = f"{breaker_id}{key_suffix}"
-                cached_val = stored.get(cache_key)
-                if cached_val is not None and rest_val < cached_val * 0.5:
-                    corrected = round(cached_val + rest_val, 3)
-                    LOGGER.debug(
-                        "Energy correction %s/%s: REST=%s (delta), "
-                        "cached=%s, corrected=%s",
-                        breaker.name, attr, rest_val, cached_val, corrected,
-                    )
-                    setattr(breaker, attr, corrected)
-                    stored[cache_key] = corrected
-                    changed = True
-                elif cached_val is None or rest_val > cached_val:
-                    stored[cache_key] = rest_val
-                    changed = True
-
-        for ct_id, ct in self.data.cts.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-                ("energy_import_2", "_import_2"),
-            ):
-                rest_val = getattr(ct, attr)
-                if rest_val is None:
-                    continue
-                cache_key = f"ct_{ct_id}{key_suffix}"
-                cached_val = stored.get(cache_key)
-                if cached_val is not None and rest_val < cached_val * 0.5:
-                    corrected = round(cached_val + rest_val, 3)
-                    LOGGER.debug(
-                        "Energy correction ct_%s/%s: REST=%s (delta), "
-                        "cached=%s, corrected=%s",
-                        ct_id, attr, rest_val, cached_val, corrected,
-                    )
-                    setattr(ct, attr, corrected)
-                    stored[cache_key] = corrected
-                    changed = True
-                elif cached_val is None or rest_val > cached_val:
-                    stored[cache_key] = rest_val
-                    changed = True
-
-        if changed:
-            await self._lifetime_store.async_save(stored)
-
-    async def _load_daily_baselines(self) -> None:
-        """Load daily baselines from storage, or snapshot current values."""
-        stored = await self._baseline_store.async_load()
-        if stored:
-            self.data.daily_baselines = stored
-            LOGGER.debug("Loaded %d daily baselines from storage", len(stored))
-        else:
-            LOGGER.debug("No stored baselines, snapshotting current values")
-            self._snapshot_daily_baselines()
-            await self._baseline_store.async_save(self.data.daily_baselines)
-
-    @callback
-    def _snapshot_daily_baselines(self) -> None:
-        """Record current lifetime energy as the daily baseline."""
-        for breaker_id, breaker in self.data.breakers.items():
-            if breaker.energy_consumption is not None:
-                energy = breaker.energy_consumption
-                if breaker.poles == 2:
-                    energy += breaker.energy_consumption_2 or 0
-                self.data.daily_baselines[breaker_id] = round(energy, 3)
-        for ct_id, ct in self.data.cts.items():
-            ct_total = (ct.energy_consumption or 0) + (
-                ct.energy_consumption_2 or 0
-            )
-            self.data.daily_baselines[f"ct_{ct_id}"] = round(ct_total, 3)
-
     async def _async_handle_midnight(self, _now: Any) -> None:
         """Reset daily energy baselines at midnight and persist."""
-        LOGGER.debug("Midnight reset: snapshotting daily energy baselines")
-        self._snapshot_daily_baselines()
-        await self._baseline_store.async_save(self.data.daily_baselines)
-        await self._save_lifetime_energy()
+        await self.energy.handle_midnight(self.data)
         self.async_set_updated_data(self.data)
-
-    async def _save_lifetime_energy(self) -> None:
-        """Persist current lifetime energy values for delta detection."""
-        stored: dict[str, float] = {}
-        for breaker_id, breaker in self.data.breakers.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-            ):
-                val = getattr(breaker, attr)
-                if val is not None:
-                    stored[f"{breaker_id}{key_suffix}"] = val
-        for ct_id, ct in self.data.cts.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-                ("energy_import_2", "_import_2"),
-            ):
-                val = getattr(ct, attr)
-                if val is not None:
-                    stored[f"ct_{ct_id}{key_suffix}"] = val
-        await self._lifetime_store.async_save(stored)
-
-    def clamp_increasing(self, key: str, value: float) -> float:
-        """Ensure a TOTAL_INCREASING value never decreases.
-
-        IEEE 754 float arithmetic can cause sums of independently-rounded
-        values to fluctuate by ±0.001.  This clamps to the high-water mark
-        so HA's recorder never sees a decrease.  Resets on restart (fresh
-        REST values have no accumulation rounding drift).
-        """
-        prev = self._energy_high_water.get(key)
-        if prev is not None and value < prev:
-            LOGGER.debug(
-                "Clamped decreasing energy %s: %s -> %s", key, value, prev
-            )
-            return prev
-        self._energy_high_water[key] = value
-        return value
-
-    @staticmethod
-    def calc_daily_energy(
-        breaker_id: str, lifetime: float | None, data: LevitonData
-    ) -> float | None:
-        """Get daily energy for a breaker (current lifetime - midnight baseline)."""
-        if lifetime is None:
-            return None
-        baseline = data.daily_baselines.get(breaker_id)
-        if baseline is None:
-            return None
-        daily = lifetime - baseline
-        return round(max(0.0, daily), 2)
 
     async def _discover_devices(self) -> None:
         """Discover all residences, hubs, breakers, and CTs."""
@@ -422,210 +362,6 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 "Failed to fetch panels for residence %s", residence_id
             )
 
-    async def _connect_websocket(self) -> None:
-        """Connect WebSocket and subscribe to all hubs."""
-        if not self.client.token or not self.client.user_id:
-            return
-
-        try:
-            self.ws = self.client.create_websocket()
-            await self.ws.connect()
-        except LevitonConnectionError:
-            LOGGER.warning(
-                "WebSocket connection failed, using REST polling only",
-                exc_info=True,
-            )
-            self.ws = None
-            return
-
-        LOGGER.debug("WebSocket connected")
-
-        # Reset staleness clock on new connection
-        self._last_ws_notification = time.monotonic()
-
-        # Register callbacks
-        self._ws_remove_notification = self.ws.on_notification(
-            self._handle_ws_notification
-        )
-        self._ws_remove_disconnect = self.ws.on_disconnect(
-            self._handle_ws_disconnect
-        )
-
-        # Subscribe to all LWHEM hubs and enable bandwidth
-        for whem_id in self.data.whems:
-            try:
-                await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
-                await self.ws.subscribe("IotWhem", whem_id)
-            except LevitonConnectionError:
-                LOGGER.warning("Failed to subscribe to WHEM %s", whem_id)
-
-        # Subscribe to all DAU panels and enable bandwidth
-        for panel_id in self.data.panels:
-            try:
-                await self.client.set_panel_bandwidth(panel_id, enabled=True)
-                await self.ws.subscribe("ResidentialBreakerPanel", panel_id)
-            except LevitonConnectionError:
-                LOGGER.warning("Failed to subscribe to panel %s", panel_id)
-
-        # Subscribe to individual breakers for WHEMs on FW 2.0.0+.
-        # FW 2.0.13+ stopped delivering breaker updates as nested arrays
-        # in IotWhem notifications. Individual subscriptions are required.
-        # On older FW, the hub subscription covers breakers -- skip to
-        # avoid duplicate notifications and wasted bandwidth.
-        # CTs are always delivered via the hub subscription on all FW.
-        for whem_id, whem in self.data.whems.items():
-            if not self._needs_individual_breaker_subs(whem):
-                LOGGER.debug(
-                    "WHEM %s on FW %s: hub subscription covers breakers",
-                    whem_id,
-                    whem.version,
-                )
-                continue
-            LOGGER.debug(
-                "WHEM %s on FW %s: subscribing to individual breakers",
-                whem_id,
-                whem.version,
-            )
-            for breaker_id, breaker in self.data.breakers.items():
-                if breaker.iot_whem_id != whem_id:
-                    continue
-                try:
-                    await self.ws.subscribe("ResidentialBreaker", breaker_id)
-                except LevitonConnectionError:
-                    LOGGER.warning(
-                        "Failed to subscribe to breaker %s", breaker_id
-                    )
-
-        # Bandwidth is set once on connect (above). The WHEM auto-reverts
-        # from 1 to 2 within seconds, and 2 is sufficient for real-time push.
-        # The app re-sends every ~25s, but we haven't observed bandwidth
-        # dropping back to 0 on its own -- avoid unnecessary API calls.
-
-        # Start periodic API keepalive to prevent server-side session timeout.
-        # The Leviton server drops WS push after ~60 min of API inactivity.
-        self._start_keepalive()
-
-    @callback
-    def _start_keepalive(self) -> None:
-        """Schedule periodic WS reconnection, silence watchdog, and bandwidth keepalive.
-
-        The Leviton server hard-kills WS push notifications after exactly
-        60 minutes regardless of any REST API activity. Neither bandwidth
-        PUTs nor /apiversion polling prevent this (confirmed via 57-hour
-        traffic capture of the official app which has the same problem).
-
-        Three mechanisms:
-        1. Proactive reconnect every 55 minutes (before the 60-min cutoff).
-        2. Silence watchdog every 30 seconds — if no WS data for 90 seconds,
-           force an immediate reconnect (catches silent connection drops).
-        3. Bandwidth PUT every 60 seconds for WHEMs — keeps CTs pushing
-           data at high frequency. Without this, CTs only update every
-           2-12 minutes after bandwidth auto-reverts from 1 to 2.
-        """
-        self._stop_keepalive()
-        self._keepalive_unsub = async_track_time_interval(
-            self.hass, self._async_ws_refresh, timedelta(minutes=55)
-        )
-        self._watchdog_unsub = async_track_time_interval(
-            self.hass, self._async_ws_watchdog, timedelta(seconds=30)
-        )
-        if self.data.whems:
-            self._bandwidth_unsub = async_track_time_interval(
-                self.hass, self._async_bandwidth_keepalive, timedelta(seconds=60)
-            )
-
-    @callback
-    def _stop_keepalive(self) -> None:
-        """Stop periodic WS refresh, watchdog, and bandwidth keepalive."""
-        if self._keepalive_unsub:
-            self._keepalive_unsub()
-            self._keepalive_unsub = None
-        if self._watchdog_unsub:
-            self._watchdog_unsub()
-            self._watchdog_unsub = None
-        if self._bandwidth_unsub:
-            self._bandwidth_unsub()
-            self._bandwidth_unsub = None
-
-    async def _async_ws_refresh(self, _now: Any) -> None:
-        """Proactively reconnect WS before the 60-minute server timeout."""
-        if self.ws is None:
-            return
-        LOGGER.debug("Proactive WS refresh (55-min cycle)")
-        # Remove disconnect callback before disconnecting to prevent
-        # _handle_ws_disconnect from also triggering a reconnect.
-        if self._ws_remove_disconnect:
-            self._ws_remove_disconnect()
-        self._ws_remove_disconnect = None
-        self._ws_remove_notification = None
-        await self.ws.disconnect()
-        self.ws = None
-        await self._connect_websocket()
-
-    async def _async_ws_watchdog(self, _now: Any) -> None:
-        """Force reconnect if WS has been silent for 90+ seconds."""
-        if self.ws is None or self._reconnecting:
-            return
-        silence = time.monotonic() - self._last_ws_notification
-        if silence < 90:
-            return
-        LOGGER.warning(
-            "WS silent for %d seconds, forcing reconnect", int(silence)
-        )
-        # Remove disconnect callback before disconnecting to prevent
-        # _handle_ws_disconnect from also triggering a reconnect.
-        if self._ws_remove_disconnect:
-            self._ws_remove_disconnect()
-        self._ws_remove_disconnect = None
-        self._ws_remove_notification = None
-        await self.ws.disconnect()
-        self.ws = None
-        self._stop_keepalive()
-        if not self._reconnecting:
-            self.config_entry.async_create_background_task(
-                self.hass,
-                self._reconnect_websocket(),
-                "leviton_ws_reconnect",
-            )
-
-    async def _async_bandwidth_keepalive(self, _now: Any) -> None:
-        """Toggle bandwidth 1→0→1 on WHEMs to trigger fresh CT data push.
-
-        The WHEM needs to see a 0→1 transition to push new readings.
-        Just sending 1 repeatedly doesn't trigger a refresh after the
-        initial auto-revert from 1 to 2.
-        """
-        if self.ws is None:
-            return
-        for whem_id in self.data.whems:
-            try:
-                await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
-                await self.client.set_whem_bandwidth(whem_id, bandwidth=0)
-                await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
-            except LevitonConnectionError:
-                LOGGER.warning("Bandwidth keepalive failed for WHEM %s", whem_id)
-
-    @staticmethod
-    def _needs_individual_breaker_subs(whem: Whem) -> bool:
-        """Check if a WHEM needs individual breaker subscriptions.
-
-        FW 2.0.0+ stopped delivering breaker updates as nested arrays in
-        IotWhem parent notifications. Individual ResidentialBreaker
-        subscriptions are required. On older FW (1.x), the hub subscription
-        delivers all child updates and individual subs are redundant.
-        """
-        if whem.version is None:
-            return True  # Assume newest FW if unknown
-        try:
-            parts = tuple(int(x) for x in whem.version.split("."))
-            return parts >= (2, 0, 0)
-        except (ValueError, AttributeError):
-            LOGGER.debug(
-                "Could not parse WHEM FW version '%s', assuming >=2.0.0",
-                whem.version,
-            )
-            return True  # Assume newest FW if unparseable
-
     @callback
     def _check_firmware_updates(self) -> None:
         """Create or clear repair issues for available firmware updates."""
@@ -670,189 +406,6 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 )
             else:
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-
-    @staticmethod
-    def _accumulate_breaker_energy(
-        breaker_data: dict[str, Any], breaker: Breaker
-    ) -> None:
-        """Convert WS energy deltas to accumulated lifetime values.
-
-        The WS delivers energyConsumption as a delta (energy since last report),
-        not the lifetime total that the REST API returns. We accumulate deltas
-        onto the current lifetime value so sensors stay correct.
-
-        Safety: if the WS value is large relative to the current lifetime
-        (>50% of current), it's a full lifetime value from a state flood,
-        not a delta. Leave it as-is (lifetime replacement).
-        """
-        for ws_key, attr in (
-            ("energyConsumption", "energy_consumption"),
-            ("energyConsumption2", "energy_consumption_2"),
-            ("energyImport", "energy_import"),
-        ):
-            delta = breaker_data.get(ws_key)
-            if delta is not None:
-                current = getattr(breaker, attr) or 0
-                if current > 0 and delta > current * 0.5:
-                    # State flood — keep the higher of REST and WS lifetimes
-                    breaker_data[ws_key] = round(max(delta, current), 3)
-                else:
-                    breaker_data[ws_key] = round(current + delta, 3)
-
-    @staticmethod
-    def _accumulate_ct_energy(
-        ct_data: dict[str, Any], ct: Ct
-    ) -> None:
-        """Convert WS energy deltas to accumulated lifetime values for CTs.
-
-        Safety: if the WS value is large relative to the current lifetime
-        (>50% of current), it's a full lifetime value from a state flood,
-        not a delta. Leave it as-is (lifetime replacement).
-        """
-        for ws_key, attr in (
-            ("energyConsumption", "energy_consumption"),
-            ("energyConsumption2", "energy_consumption_2"),
-            ("energyImport", "energy_import"),
-            ("energyImport2", "energy_import_2"),
-        ):
-            delta = ct_data.get(ws_key)
-            if delta is not None:
-                current = getattr(ct, attr) or 0
-                if current > 0 and delta > current * 0.5:
-                    # State flood — keep the higher of REST and WS lifetimes
-                    ct_data[ws_key] = round(max(delta, current), 3)
-                else:
-                    ct_data[ws_key] = round(current + delta, 3)
-
-    def _apply_breaker_ws_update(
-        self, breaker_data: dict[str, Any]
-    ) -> bool:
-        """Apply a single breaker update from a WS notification.
-
-        Accumulates energy deltas and synthesizes currentState for Gen 1 trips.
-        Returns True if a known breaker was updated.
-        """
-        breaker_id = breaker_data.get("id")
-        if not breaker_id or breaker_id not in self.data.breakers:
-            return False
-        breaker = self.data.breakers[breaker_id]
-        self._accumulate_breaker_energy(breaker_data, breaker)
-        if breaker_data.get("remoteTrip") and not breaker.can_remote_on:
-            breaker_data.setdefault("currentState", "SoftwareTrip")
-        breaker.update(breaker_data)
-        return True
-
-    @callback
-    def _handle_ws_notification(self, notification: dict[str, Any]) -> None:
-        """Process a WebSocket push notification."""
-        self._last_ws_notification = time.monotonic()
-        model_name = notification.get("modelName", "")
-        model_id = notification.get("modelId")
-        data = notification.get("data", {})
-
-        if not data or model_id is None:
-            LOGGER.debug(
-                "WS notification dropped: empty data or no modelId (modelName=%s)",
-                model_name,
-            )
-            return
-
-        breaker_ids: list[str] = []
-        ct_ids: list[str] = []
-        hub_updated = False
-
-        if model_name == "IotWhem":
-            # Check for child breaker updates
-            if "ResidentialBreaker" in data:
-                for breaker_data in data["ResidentialBreaker"]:
-                    if self._apply_breaker_ws_update(breaker_data):
-                        breaker_ids.append(breaker_data.get("id", "?"))
-
-            # Check for child CT updates
-            if "IotCt" in data:
-                for ct_data in data["IotCt"]:
-                    ct_id = ct_data.get("id")
-                    if ct_id is not None:
-                        ct_key = str(ct_id)
-                        if ct_key in self.data.cts:
-                            self._accumulate_ct_energy(
-                                ct_data, self.data.cts[ct_key]
-                            )
-                            self.data.cts[ct_key].update(ct_data)
-                            ct_ids.append(ct_key)
-
-            # WHEM own property updates (exclude child arrays)
-            whem_data = {
-                k: v
-                for k, v in data.items()
-                if k not in ("ResidentialBreaker", "IotCt")
-            }
-            if whem_data and str(model_id) in self.data.whems:
-                self.data.whems[str(model_id)].update(whem_data)
-                hub_updated = True
-
-        elif model_name == "ResidentialBreakerPanel":
-            # Check for child breaker updates
-            if "ResidentialBreaker" in data:
-                for breaker_data in data["ResidentialBreaker"]:
-                    if self._apply_breaker_ws_update(breaker_data):
-                        breaker_ids.append(breaker_data.get("id", "?"))
-
-            # Panel own property updates
-            panel_data = {
-                k: v for k, v in data.items() if k != "ResidentialBreaker"
-            }
-            if panel_data and str(model_id) in self.data.panels:
-                self.data.panels[str(model_id)].update(panel_data)
-                hub_updated = True
-
-        elif model_name == "ResidentialBreaker":
-            # Direct breaker update — data IS the breaker payload
-            data["id"] = str(model_id)
-            if self._apply_breaker_ws_update(data):
-                breaker_ids.append(str(model_id))
-
-        elif model_name == "IotCt":
-            ct_key = str(model_id)
-            if ct_key in self.data.cts:
-                self._accumulate_ct_energy(data, self.data.cts[ct_key])
-                self.data.cts[ct_key].update(data)
-                ct_ids.append(ct_key)
-
-        else:
-            LOGGER.debug(
-                "WS notification ignored: unknown model %s/%s",
-                model_name, model_id,
-            )
-            return
-
-        if breaker_ids or ct_ids or hub_updated:
-            parts = [f"{model_name} {model_id}"]
-            if hub_updated:
-                parts.append("hub(%s)" % ", ".join(
-                    k for k in data if k not in ("ResidentialBreaker", "IotCt")
-                ))
-            if breaker_ids:
-                parts.append("breakers(%s)" % " ".join(breaker_ids))
-            if ct_ids:
-                parts.append("CTs(%s)" % " ".join(ct_ids))
-            LOGGER.debug("WS update: %s", ", ".join(parts))
-            self.async_set_updated_data(self.data)
-
-    @callback
-    def _handle_ws_disconnect(self) -> None:
-        """Handle WebSocket disconnect - schedule reconnection."""
-        LOGGER.warning("WebSocket disconnected, falling back to REST polling")
-        self.ws = None
-        self._ws_remove_notification = None
-        self._ws_remove_disconnect = None
-        self._stop_keepalive()
-        if not self._reconnecting:
-            self.config_entry.async_create_background_task(
-                self.hass,
-                self._reconnect_websocket(),
-                "leviton_ws_reconnect",
-            )
 
     async def _async_update_data(self) -> LevitonData:
         """Periodic REST polling (every 10 minutes).
@@ -909,95 +462,8 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
         return self.data
 
-    async def _reconnect_websocket(self) -> None:
-        """Attempt to reconnect WebSocket with exponential backoff."""
-        if self._reconnecting:
-            LOGGER.debug("WebSocket reconnection already in progress")
-            return
-        self._reconnecting = True
-        try:
-            delays = [10, 30, 60, 120, 300]  # seconds
-            for attempt, delay in enumerate(delays, 1):
-                LOGGER.debug(
-                    "WebSocket reconnection attempt %d in %d seconds",
-                    attempt,
-                    delay,
-                )
-                await asyncio.sleep(delay)
-
-                # Validate token before attempting WS reconnect (WS module
-                # can't distinguish auth failures from connection failures)
-                try:
-                    await self.client.get_permissions()
-                except LevitonAuthError as err:
-                    LOGGER.warning(
-                        "Token expired during reconnection: %s", err
-                    )
-                    self.config_entry.async_start_reauth(self.hass)
-                    return
-                except LevitonConnectionError:
-                    LOGGER.debug(
-                        "API unreachable during reconnection attempt %d",
-                        attempt,
-                    )
-                    continue
-
-                try:
-                    await self._connect_websocket()
-                    if self.ws is not None:
-                        LOGGER.info("WebSocket reconnected successfully")
-                        return
-                except (LevitonConnectionError, OSError):
-                    LOGGER.debug(
-                        "WebSocket reconnection attempt %d failed",
-                        attempt,
-                        exc_info=True,
-                    )
-            LOGGER.warning(
-                "WebSocket reconnection failed after %d attempts, "
-                "using REST polling (10-min interval)",
-                len(delays),
-            )
-        except asyncio.CancelledError:
-            LOGGER.debug("WebSocket reconnection cancelled")
-            raise
-        finally:
-            self._reconnecting = False
-
     async def async_shutdown(self) -> None:
         """Clean up WebSocket and bandwidth settings."""
         LOGGER.debug("Shutting down coordinator")
         await super().async_shutdown()
-
-        # Clean up notification callbacks (idempotent — may be called twice
-        # because DataUpdateCoordinator auto-registers shutdown via config_entry)
-        if self._ws_remove_notification:
-            self._ws_remove_notification()
-            self._ws_remove_notification = None
-        if self._ws_remove_disconnect:
-            self._ws_remove_disconnect()
-            self._ws_remove_disconnect = None
-        self._stop_keepalive()
-
-        # Disable bandwidth on all hubs (data may be None if setup failed early)
-        if self.data is None:
-            return
-        for panel_id in self.data.panels:
-            try:
-                await self.client.set_panel_bandwidth(panel_id, enabled=False)
-            except LevitonConnectionError:
-                LOGGER.debug(
-                    "Failed to disable bandwidth for panel %s", panel_id
-                )
-        for whem_id in self.data.whems:
-            try:
-                await self.client.set_whem_bandwidth(whem_id, bandwidth=0)
-            except LevitonConnectionError:
-                LOGGER.debug(
-                    "Failed to disable bandwidth for WHEM %s", whem_id
-                )
-
-        # Disconnect WebSocket
-        if self.ws:
-            await self.ws.disconnect()
-            self.ws = None
+        await self.ws_manager.shutdown()

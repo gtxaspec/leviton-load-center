@@ -13,7 +13,7 @@ from homeassistant.components.leviton_load_center.coordinator import LevitonData
 from homeassistant.components.leviton_load_center.entity import (
     should_include_breaker,
 )
-from homeassistant.components.leviton_load_center.sensor import (
+from homeassistant.components.leviton_load_center.sensor_descriptions import (
     BREAKER_SENSORS,
     CT_SENSORS,
     PANEL_SENSORS,
