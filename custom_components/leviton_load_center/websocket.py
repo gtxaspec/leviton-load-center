@@ -13,7 +13,7 @@ from aioleviton import LevitonConnectionError, LevitonAuthError, LevitonWebSocke
 from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_time_interval
 
-from .const import LOGGER
+from .const import LOGGER, STATE_SOFTWARE_TRIP
 from .energy import accumulate_breaker_energy, accumulate_ct_energy
 
 if TYPE_CHECKING:
@@ -306,7 +306,7 @@ class WebSocketManager:
         breaker = data.breakers[breaker_id]
         accumulate_breaker_energy(breaker_data, breaker)
         if breaker_data.get("remoteTrip") and not breaker.can_remote_on:
-            breaker_data.setdefault("currentState", "SoftwareTrip")
+            breaker_data.setdefault("currentState", STATE_SOFTWARE_TRIP)
         breaker.update(breaker_data)
         return True
 

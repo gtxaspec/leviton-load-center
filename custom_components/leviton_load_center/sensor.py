@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -47,19 +48,18 @@ async def async_setup_entry(
     """Set up Leviton sensor entities."""
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
-    options = dict(entry.options)
     entities: list[SensorEntity] = []
 
     # Breaker sensors
     for breaker_id, breaker in data.breakers.items():
-        if not should_include_breaker(breaker, options):
+        if not should_include_breaker(breaker, entry.options):
             continue
         dev_info = breaker_device_info(breaker_id, data)
         for desc in BREAKER_SENSORS:
             if desc.exists_fn(breaker):
                 entities.append(
                     LevitonBreakerSensor(
-                        coordinator, desc, breaker_id, dev_info, options
+                        coordinator, desc, breaker_id, dev_info, entry.options
                     )
                 )
 
@@ -107,7 +107,7 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         description: LevitonBreakerSensorDescription,
         breaker_id: str,
         device_info: DeviceInfo,
-        options: dict[str, Any],
+        options: Mapping[str, Any],
     ) -> None:
         """Initialize the breaker sensor."""
         super().__init__(coordinator, description, breaker_id, device_info)

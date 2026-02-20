@@ -16,9 +16,39 @@ if TYPE_CHECKING:
 
 STORAGE_VERSION = 1
 
+# (ws_key, model_attr) tuples for energy fields
+_BREAKER_ENERGY_FIELDS = (
+    ("energyConsumption", "energy_consumption"),
+    ("energyConsumption2", "energy_consumption_2"),
+    ("energyImport", "energy_import"),
+)
 
-def accumulate_breaker_energy(
-    breaker_data: dict[str, Any], breaker: Breaker
+_CT_ENERGY_FIELDS = (
+    ("energyConsumption", "energy_consumption"),
+    ("energyConsumption2", "energy_consumption_2"),
+    ("energyImport", "energy_import"),
+    ("energyImport2", "energy_import_2"),
+)
+
+# (model_attr, cache_key_suffix) tuples for lifetime cache
+_BREAKER_CACHE_FIELDS = (
+    ("energy_consumption", ""),
+    ("energy_consumption_2", "_2"),
+    ("energy_import", "_import"),
+)
+
+_CT_CACHE_FIELDS = (
+    ("energy_consumption", ""),
+    ("energy_consumption_2", "_2"),
+    ("energy_import", "_import"),
+    ("energy_import_2", "_import_2"),
+)
+
+
+def _accumulate_energy(
+    ws_data: dict[str, Any],
+    model: Breaker | Ct,
+    fields: tuple[tuple[str, str], ...],
 ) -> None:
     """Convert WS energy deltas to accumulated lifetime values.
 
@@ -30,44 +60,28 @@ def accumulate_breaker_energy(
     (>50% of current), it's a full lifetime value from a state flood,
     not a delta. Leave it as-is (lifetime replacement).
     """
-    for ws_key, attr in (
-        ("energyConsumption", "energy_consumption"),
-        ("energyConsumption2", "energy_consumption_2"),
-        ("energyImport", "energy_import"),
-    ):
-        delta = breaker_data.get(ws_key)
+    for ws_key, attr in fields:
+        delta = ws_data.get(ws_key)
         if delta is not None:
-            current = getattr(breaker, attr) or 0
+            current = getattr(model, attr) or 0
             if current > 0 and delta > current * 0.5:
-                # State flood — keep the higher of REST and WS lifetimes
-                breaker_data[ws_key] = round(max(delta, current), 3)
+                ws_data[ws_key] = round(max(delta, current), 3)
             else:
-                breaker_data[ws_key] = round(current + delta, 3)
+                ws_data[ws_key] = round(current + delta, 3)
+
+
+def accumulate_breaker_energy(
+    breaker_data: dict[str, Any], breaker: Breaker
+) -> None:
+    """Convert WS energy deltas to accumulated lifetime values for breakers."""
+    _accumulate_energy(breaker_data, breaker, _BREAKER_ENERGY_FIELDS)
 
 
 def accumulate_ct_energy(
     ct_data: dict[str, Any], ct: Ct
 ) -> None:
-    """Convert WS energy deltas to accumulated lifetime values for CTs.
-
-    Safety: if the WS value is large relative to the current lifetime
-    (>50% of current), it's a full lifetime value from a state flood,
-    not a delta. Leave it as-is (lifetime replacement).
-    """
-    for ws_key, attr in (
-        ("energyConsumption", "energy_consumption"),
-        ("energyConsumption2", "energy_consumption_2"),
-        ("energyImport", "energy_import"),
-        ("energyImport2", "energy_import_2"),
-    ):
-        delta = ct_data.get(ws_key)
-        if delta is not None:
-            current = getattr(ct, attr) or 0
-            if current > 0 and delta > current * 0.5:
-                # State flood — keep the higher of REST and WS lifetimes
-                ct_data[ws_key] = round(max(delta, current), 3)
-            else:
-                ct_data[ws_key] = round(current + delta, 3)
+    """Convert WS energy deltas to accumulated lifetime values for CTs."""
+    _accumulate_energy(ct_data, ct, _CT_ENERGY_FIELDS)
 
 
 def calc_daily_energy(
@@ -99,6 +113,52 @@ def snapshot_daily_baselines(data: LevitonData) -> None:
         data.daily_baselines[f"ct_{ct_id}"] = round(ct_total, 3)
 
 
+def _correct_device_energy(
+    device_id: str,
+    device: Breaker | Ct,
+    stored: dict[str, float],
+    fields: tuple[tuple[str, str], ...],
+    key_prefix: str,
+) -> bool:
+    """Correct delta energy values for a single device. Returns True if changed."""
+    changed = False
+    for attr, key_suffix in fields:
+        rest_val = getattr(device, attr)
+        if rest_val is None:
+            continue
+        cache_key = f"{key_prefix}{device_id}{key_suffix}"
+        cached_val = stored.get(cache_key)
+        if cached_val is not None and rest_val < cached_val * 0.5:
+            corrected = round(cached_val + rest_val, 3)
+            LOGGER.debug(
+                "Energy correction %s%s/%s: REST=%s (delta), "
+                "cached=%s, corrected=%s",
+                key_prefix, getattr(device, "name", device_id),
+                attr, rest_val, cached_val, corrected,
+            )
+            setattr(device, attr, corrected)
+            stored[cache_key] = corrected
+            changed = True
+        elif cached_val is None or rest_val > cached_val:
+            stored[cache_key] = rest_val
+            changed = True
+    return changed
+
+
+def _collect_device_energy(
+    device_id: str,
+    device: Breaker | Ct,
+    stored: dict[str, float],
+    fields: tuple[tuple[str, str], ...],
+    key_prefix: str,
+) -> None:
+    """Collect current energy values from a device into the stored dict."""
+    for attr, key_suffix in fields:
+        val = getattr(device, attr)
+        if val is not None:
+            stored[f"{key_prefix}{device_id}{key_suffix}"] = val
+
+
 class EnergyTracker:
     """Manages energy correction, lifetime caching, and daily baselines."""
 
@@ -127,55 +187,14 @@ class EnergyTracker:
         changed = False
 
         for breaker_id, breaker in data.breakers.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-            ):
-                rest_val = getattr(breaker, attr)
-                if rest_val is None:
-                    continue
-                cache_key = f"{breaker_id}{key_suffix}"
-                cached_val = stored.get(cache_key)
-                if cached_val is not None and rest_val < cached_val * 0.5:
-                    corrected = round(cached_val + rest_val, 3)
-                    LOGGER.debug(
-                        "Energy correction %s/%s: REST=%s (delta), "
-                        "cached=%s, corrected=%s",
-                        breaker.name, attr, rest_val, cached_val, corrected,
-                    )
-                    setattr(breaker, attr, corrected)
-                    stored[cache_key] = corrected
-                    changed = True
-                elif cached_val is None or rest_val > cached_val:
-                    stored[cache_key] = rest_val
-                    changed = True
+            changed |= _correct_device_energy(
+                breaker_id, breaker, stored, _BREAKER_CACHE_FIELDS, ""
+            )
 
         for ct_id, ct in data.cts.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-                ("energy_import_2", "_import_2"),
-            ):
-                rest_val = getattr(ct, attr)
-                if rest_val is None:
-                    continue
-                cache_key = f"ct_{ct_id}{key_suffix}"
-                cached_val = stored.get(cache_key)
-                if cached_val is not None and rest_val < cached_val * 0.5:
-                    corrected = round(cached_val + rest_val, 3)
-                    LOGGER.debug(
-                        "Energy correction ct_%s/%s: REST=%s (delta), "
-                        "cached=%s, corrected=%s",
-                        ct_id, attr, rest_val, cached_val, corrected,
-                    )
-                    setattr(ct, attr, corrected)
-                    stored[cache_key] = corrected
-                    changed = True
-                elif cached_val is None or rest_val > cached_val:
-                    stored[cache_key] = rest_val
-                    changed = True
+            changed |= _correct_device_energy(
+                ct_id, ct, stored, _CT_CACHE_FIELDS, "ct_"
+            )
 
         if changed:
             await self._lifetime_store.async_save(stored)
@@ -195,24 +214,9 @@ class EnergyTracker:
         """Persist current lifetime energy values for delta detection."""
         stored: dict[str, float] = {}
         for breaker_id, breaker in data.breakers.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-            ):
-                val = getattr(breaker, attr)
-                if val is not None:
-                    stored[f"{breaker_id}{key_suffix}"] = val
+            _collect_device_energy(breaker_id, breaker, stored, _BREAKER_CACHE_FIELDS, "")
         for ct_id, ct in data.cts.items():
-            for attr, key_suffix in (
-                ("energy_consumption", ""),
-                ("energy_consumption_2", "_2"),
-                ("energy_import", "_import"),
-                ("energy_import_2", "_import_2"),
-            ):
-                val = getattr(ct, attr)
-                if val is not None:
-                    stored[f"ct_{ct_id}{key_suffix}"] = val
+            _collect_device_energy(ct_id, ct, stored, _CT_CACHE_FIELDS, "ct_")
         await self._lifetime_store.async_save(stored)
 
     async def handle_midnight(self, data: LevitonData) -> None:

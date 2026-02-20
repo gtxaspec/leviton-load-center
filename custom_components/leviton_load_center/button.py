@@ -13,10 +13,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
+from .const import (
+    CONF_READ_ONLY,
+    DEFAULT_READ_ONLY,
+    DOMAIN,
+    LOGGER,
+    STATE_SOFTWARE_TRIP,
+)
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import (
-    BREAKER_OFFLINE_STATES,
+    LevitonBreakerControlEntity,
     LevitonEntity,
     breaker_device_info,
     should_include_breaker,
@@ -48,11 +54,10 @@ async def async_setup_entry(
 
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
-    options = dict(entry.options)
     entities: list[ButtonEntity] = []
 
     for breaker_id, breaker in data.breakers.items():
-        if not should_include_breaker(breaker, options):
+        if not should_include_breaker(breaker, entry.options):
             continue
         # Trip button: Gen 1 only (Gen 2 uses switch turn_off instead)
         if breaker.is_smart and not breaker.can_remote_on:
@@ -76,20 +81,10 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class LevitonTripButton(LevitonEntity, ButtonEntity):
+class LevitonTripButton(LevitonBreakerControlEntity, ButtonEntity):
     """Button entity to trip a Gen 1 breaker."""
 
     _attr_device_class = None
-
-    @property
-    def available(self) -> bool:
-        """Return False when the breaker is offline."""
-        if not super().available:
-            return False
-        breaker = self.coordinator.data.breakers.get(self._device_id)
-        if breaker is None:
-            return False
-        return breaker.current_state not in BREAKER_OFFLINE_STATES
 
     async def async_press(self) -> None:
         """Trip the breaker."""
@@ -109,7 +104,7 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
         # commands, so set expected state immediately and notify all entities.
         breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker:
-            breaker.current_state = "SoftwareTrip"
+            breaker.current_state = STATE_SOFTWARE_TRIP
             self.coordinator.async_set_updated_data(self.coordinator.data)
 
 

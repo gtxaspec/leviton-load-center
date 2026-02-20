@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from aioleviton import Breaker
@@ -10,13 +11,13 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY, DOMAIN
+from .const import (
+    BREAKER_OFFLINE_STATES,
+    CONF_HIDE_DUMMY,
+    DEFAULT_HIDE_DUMMY,
+    DOMAIN,
+)
 from .coordinator import LevitonCoordinator, LevitonData
-
-
-BREAKER_OFFLINE_STATES = frozenset({
-    "NotCommunicating", "CommunicationFailure", "UNDEFINED",
-})
 
 
 class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
@@ -63,6 +64,20 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
                     if panel is not None and not panel.is_online:
                         return False
         return True
+
+
+class LevitonBreakerControlEntity(LevitonEntity):
+    """Base for breaker control entities that are unavailable when offline."""
+
+    @property
+    def available(self) -> bool:
+        """Return False when the breaker is offline."""
+        if not super().available:
+            return False
+        breaker = self.coordinator.data.breakers.get(self._device_id)
+        if breaker is None:
+            return False
+        return breaker.current_state not in BREAKER_OFFLINE_STATES
 
 
 def whem_device_info(whem_id: str, data: LevitonData) -> DeviceInfo:
@@ -136,7 +151,7 @@ def ct_device_info(ct_id: str, data: LevitonData) -> DeviceInfo:
     )
 
 
-def should_include_breaker(breaker: Breaker, options: dict[str, Any]) -> bool:
+def should_include_breaker(breaker: Breaker, options: Mapping[str, Any]) -> bool:
     """Determine if a breaker should have entities created."""
     if breaker.is_lsbma:
         return False

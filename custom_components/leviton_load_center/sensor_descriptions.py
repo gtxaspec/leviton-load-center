@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,6 +28,28 @@ from .const import (
     CONF_VOLTAGE_208,
     DEFAULT_CALCULATED_CURRENT,
     DEFAULT_VOLTAGE_208,
+    STATE_AFCI_MISWIRE,
+    STATE_AFCI_PARALLEL_FAULT,
+    STATE_AFCI_SERIAL_ARC_10A,
+    STATE_AFCI_SERIAL_ARC_15A,
+    STATE_AFCI_SERIAL_ARC_20A,
+    STATE_AFCI_SERIAL_ARC_30A,
+    STATE_AFCI_SERIAL_ARC_5A,
+    STATE_COMMUNICATION_FAILURE,
+    STATE_COMMUNICATING,
+    STATE_GFCI_FAULT,
+    STATE_MANUAL_OFF,
+    STATE_MANUAL_ON,
+    STATE_NOT_COMMUNICATING,
+    STATE_OVERCURRENT_TRIP_1,
+    STATE_OVERCURRENT_TRIP_2,
+    STATE_OVERLOAD_TRIP,
+    STATE_REMOTE_OFF,
+    STATE_REMOTE_ON,
+    STATE_SHORT_CIRCUIT_TRIP,
+    STATE_SOFTWARE_TRIP,
+    STATE_UNDEFINED,
+    STATE_UPSTREAM_FAULT,
     VOLTAGE_120,
     VOLTAGE_208,
     VOLTAGE_240,
@@ -43,7 +65,7 @@ from .energy import calc_daily_energy
 class LevitonBreakerSensorDescription(SensorEntityDescription):
     """Describe a Leviton breaker sensor."""
 
-    value_fn: Callable[[Breaker, LevitonData, dict[str, Any]], Any]
+    value_fn: Callable[[Breaker, LevitonData, Mapping[str, Any]], Any]
     exists_fn: Callable[[Breaker], bool] = lambda _: True
 
 
@@ -81,33 +103,33 @@ def _breaker_power(breaker: Breaker) -> int | None:
 
 
 _BREAKER_STATUS_MAP: dict[str, str] = {
-    "ManualON": "on",
-    "ManualOFF": "off",
-    "COMMUNICATING": "connecting",
-    "NotCommunicating": "offline",
-    "CommunicationFailure": "offline",
-    "UNDEFINED": "offline",
-    "SoftwareTrip": "software_trip",
-    "GFCIFault": "gfci_fault",
-    "AFCIMiswire": "afci_miswire",
-    "AFCIParallelFault": "afci_fault",
-    "AFCISerialArc5AFault": "afci_fault",
-    "AFCISerialArc10AFault": "afci_fault",
-    "AFCISerialArc15AFault": "afci_fault",
-    "AFCISerialArc20AFault": "afci_fault",
-    "AFCISerialArc30AFault": "afci_fault",
-    "OverCurrentTripPhase1": "overcurrent_trip",
-    "OverCurrentTripPhase2": "overcurrent_trip",
-    "OverloadTrip": "overload_trip",
-    "ShortCircuitTrip": "short_circuit_trip",
-    "UpstreamFault": "upstream_fault",
+    STATE_MANUAL_ON: "on",
+    STATE_MANUAL_OFF: "off",
+    STATE_COMMUNICATING: "connecting",
+    STATE_NOT_COMMUNICATING: "offline",
+    STATE_COMMUNICATION_FAILURE: "offline",
+    STATE_UNDEFINED: "offline",
+    STATE_SOFTWARE_TRIP: "software_trip",
+    STATE_GFCI_FAULT: "gfci_fault",
+    STATE_AFCI_MISWIRE: "afci_miswire",
+    STATE_AFCI_PARALLEL_FAULT: "afci_fault",
+    STATE_AFCI_SERIAL_ARC_5A: "afci_fault",
+    STATE_AFCI_SERIAL_ARC_10A: "afci_fault",
+    STATE_AFCI_SERIAL_ARC_15A: "afci_fault",
+    STATE_AFCI_SERIAL_ARC_20A: "afci_fault",
+    STATE_AFCI_SERIAL_ARC_30A: "afci_fault",
+    STATE_OVERCURRENT_TRIP_1: "overcurrent_trip",
+    STATE_OVERCURRENT_TRIP_2: "overcurrent_trip",
+    STATE_OVERLOAD_TRIP: "overload_trip",
+    STATE_SHORT_CIRCUIT_TRIP: "short_circuit_trip",
+    STATE_UPSTREAM_FAULT: "upstream_fault",
 }
 
 BREAKER_STATUS_OPTIONS: list[str] = sorted(set(_BREAKER_STATUS_MAP.values()))
 
 REMOTE_STATUS_MAP: dict[str, str] = {
-    "RemoteON": "on",
-    "RemoteOFF": "off",
+    STATE_REMOTE_ON: "on",
+    STATE_REMOTE_OFF: "off",
 }
 
 REMOTE_STATUS_OPTIONS: list[str] = sorted(REMOTE_STATUS_MAP.values())

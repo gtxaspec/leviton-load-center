@@ -94,11 +94,10 @@ def _cleanup_hidden_devices(
     data: LevitonData,
 ) -> None:
     """Remove devices for breakers filtered out by options."""
-    options = dict(entry.options)
     device_reg = dr.async_get(hass)
 
     for breaker_id, breaker in data.breakers.items():
-        if should_include_breaker(breaker, options):
+        if should_include_breaker(breaker, entry.options):
             continue
         device = device_reg.async_get_device(identifiers={(DOMAIN, breaker_id)})
         if device is not None:
