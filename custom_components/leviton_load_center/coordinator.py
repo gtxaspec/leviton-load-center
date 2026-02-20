@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -267,12 +268,14 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     "  WHEM %s: %s (FW %s)", whem.id, whem.name, whem.version
                 )
                 self.data.whems[whem.id] = whem
-                # Reset bandwidth before fetching breakers/CTs so the
-                # REST API returns lifetime energy (not deltas from a
-                # previous session that left bandwidth=1 active).
-                # Any residual deltas are caught by _correct_energy_values.
+                # Reset bandwidth before fetching CTs so the REST API
+                # returns lifetime energy (not deltas from a previous
+                # session that left bandwidth=1 active). The WHEM needs
+                # a brief delay to process the change — without it, CTs
+                # return delta values that corrupt daily baselines.
                 try:
                     await self.client.set_whem_bandwidth(whem.id, bandwidth=0)
+                    await asyncio.sleep(1)
                 except LevitonConnectionError:
                     LOGGER.debug(
                         "Failed to reset bandwidth for WHEM %s", whem.id
@@ -328,11 +331,11 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                 )
                 self.data.panels[panel.id] = panel
                 # Reset bandwidth before fetching breakers.
-                # Any residual deltas are caught by _correct_energy_values.
                 try:
                     await self.client.set_panel_bandwidth(
                         panel.id, enabled=False
                     )
+                    await asyncio.sleep(1)
                 except LevitonConnectionError:
                     LOGGER.debug(
                         "Failed to reset bandwidth for panel %s", panel.id
