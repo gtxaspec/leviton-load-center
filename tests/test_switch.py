@@ -5,6 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from homeassistant.components.leviton_load_center.coordinator import LevitonData, LevitonRuntimeData
 from homeassistant.components.leviton_load_center.entity import breaker_device_info
 from homeassistant.components.leviton_load_center.switch import (
@@ -85,6 +87,36 @@ def test_is_on_manual_off() -> None:
     breaker = deepcopy(MOCK_BREAKER_GEN2)
     breaker.remote_state = ""
     breaker.current_state = "ManualOFF"
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    switch = _make_switch(breaker, data, MagicMock())
+    assert switch.is_on is False
+
+
+@pytest.mark.parametrize("state", ["NotCommunicating", "CommunicationFailure", "COMMUNICATING"])
+def test_is_on_communication_states(state) -> None:
+    """Test switch stays on during communication state changes."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.remote_state = ""
+    breaker.current_state = state
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    switch = _make_switch(breaker, data, MagicMock())
+    assert switch.is_on is True
+
+
+@pytest.mark.parametrize("state", [
+    "GFCIFault", "SoftwareTrip", "OverloadTrip", "ShortCircuitTrip",
+])
+def test_is_on_trip_states(state) -> None:
+    """Test switch shows off for trip/fault states."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.remote_state = ""
+    breaker.current_state = state
     data = LevitonData(
         breakers={breaker.id: breaker},
         whems={MOCK_WHEM.id: MOCK_WHEM},

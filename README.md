@@ -49,7 +49,7 @@ Supports both hub types and accessories:
 | 208V electrical system | Off | For commercial 208V split-phase systems. Changes 2-pole voltage calculations from 240V to 208V. |
 | Read-only mode | Off | Disables all control entities (trip, on/off, identify). Only sensors and diagnostics are created. |
 | Calculate current from power | Off | Derives amperage from power/voltage instead of the raw `rmsCurrent` field for higher precision. |
-| Hide non-smart breakers | Off | Hides placeholder breakers (NONE-1/NONE-2) that don't have an LSBMA CT sensor attached. |
+| Hide non-smart breakers | Off | Hides basic breakers that don't have an LSBMA CT sensor attached. |
 
 ## Entities
 
@@ -134,14 +134,14 @@ The official Leviton Android app (v3.94.1) uses a significantly more aggressive 
 
 | | This Integration | Official App |
 |---|---|---|
-| API calls/day | ~1,500 | ~12,000 |
+| API calls/day | ~4,500 | ~12,000 |
 | `GET /apiversion` | Not used | Every 10 seconds |
-| Bandwidth PUT | 1 PUT per WHEM, every 60s | 2 PUTs per WHEM, every 50s |
+| Bandwidth PUT | 3 PUTs per WHEM, every 60s (1→0→1) | 2 PUTs per WHEM, every 50s |
 | 60-min WS timeout | Proactive reconnect at 55 min | Not handled (WS dies, no reconnect) |
 | Silence detection | 90-second watchdog | None |
 | Data source | WebSocket push (real-time) | WebSocket push (real-time) |
 
-This integration achieves the same real-time data delivery with **~8x fewer API calls** while also solving the 60-minute timeout that the official app does not address.
+This integration achieves the same real-time data delivery with **~3x fewer API calls** while also solving the 60-minute timeout that the official app does not address.
 
 ### Energy Tracking
 

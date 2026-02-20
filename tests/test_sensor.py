@@ -20,6 +20,7 @@ from homeassistant.components.leviton_load_center.sensor import (
     WHEM_SENSORS,
     _breaker_leg,
     _breaker_protect_fw,
+    _breaker_status,
     _calc_current,
     _panel_daily_energy,
     _panel_frequency,
@@ -55,20 +56,44 @@ def test_breaker_leg_2_pole() -> None:
     assert _breaker_leg(breaker) == "Both"
 
 
-def test_breaker_leg_odd_position() -> None:
-    """Test breaker leg returns '1' for odd position."""
+@pytest.mark.parametrize("position,expected", [
+    (1, "1"), (2, "1"),    # row 1 → Leg 1
+    (3, "2"), (4, "2"),    # row 2 → Leg 2
+    (5, "1"), (6, "1"),    # row 3 → Leg 1
+    (7, "2"), (8, "2"),    # row 4 → Leg 2
+    (17, "1"), (18, "1"),  # row 9 → Leg 1
+    (19, "2"), (20, "2"),  # row 10 → Leg 2
+])
+def test_breaker_leg_by_position(position, expected) -> None:
+    """Test breaker leg assignment follows paired-row pattern."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.poles = 1
-    breaker.position = 1
-    assert _breaker_leg(breaker) == "1"
+    breaker.position = position
+    assert _breaker_leg(breaker) == expected
 
 
-def test_breaker_leg_even_position() -> None:
-    """Test breaker leg returns '2' for even position."""
+@pytest.mark.parametrize("raw,expected", [
+    ("ManualON", "On"),
+    ("ManualOFF", "Off"),
+    ("COMMUNICATING", "Connecting"),
+    ("NotCommunicating", "Offline"),
+    ("CommunicationFailure", "Offline"),
+    ("UNDEFINED", "Offline"),
+    ("SoftwareTrip", "Software Trip"),
+    ("GFCIFault", "GFCI Fault"),
+    ("AFCISerialArc15AFault", "AFCI Fault"),
+    ("OverCurrentTripPhase1", "Overcurrent Trip"),
+    ("OverloadTrip", "Overload Trip"),
+    ("ShortCircuitTrip", "Short Circuit Trip"),
+    ("UpstreamFault", "Upstream Fault"),
+    ("SomeUnknownState", "SomeUnknownState"),
+    (None, None),
+])
+def test_breaker_status_mapping(raw, expected) -> None:
+    """Test breaker status maps raw currentState to display values."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
-    breaker.poles = 1
-    breaker.position = 2
-    assert _breaker_leg(breaker) == "2"
+    breaker.current_state = raw
+    assert _breaker_status(breaker) == expected
 
 
 def test_breaker_protect_fw_gfci() -> None:
@@ -145,11 +170,11 @@ def test_calc_current_from_whem_voltage() -> None:
 
 
 def test_calc_current_whem_voltage_leg2() -> None:
-    """Test calculated current falls back to WHEM voltage_b for even-position breaker."""
+    """Test calculated current falls back to WHEM voltage_b for leg 2 breaker."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.power = 244
     breaker.poles = 1
-    breaker.position = 2  # even → leg 2 → uses voltage_b
+    breaker.position = 3  # row 2 → leg 2 → uses voltage_b
     breaker.rms_voltage = None
     whem = deepcopy(MOCK_WHEM)
     data = LevitonData(whems={whem.id: whem})
@@ -380,7 +405,7 @@ def test_ct_power_with_none_leg() -> None:
     ct.active_power_2 = None
     desc = next(d for d in CT_SENSORS if d.key == "power")
     # 196 + 0 (None fallback) = 196
-    assert desc.value_fn(ct) == 196
+    assert desc.value_fn(ct, LevitonData()) == 196
 
 
 def test_ct_energy_with_none_legs() -> None:
@@ -389,7 +414,7 @@ def test_ct_energy_with_none_legs() -> None:
     ct.energy_consumption = None
     ct.energy_consumption_2 = None
     desc = next(d for d in CT_SENSORS if d.key == "lifetime_energy")
-    assert desc.value_fn(ct) == 0
+    assert desc.value_fn(ct, LevitonData()) == 0
 
 
 # --- WHEM/panel leg edge cases ---
@@ -528,15 +553,15 @@ def test_panel_daily_energy_no_baselines() -> None:
 
 
 def test_panel_leg_power_leg1() -> None:
-    """Test panel leg power sums power for odd-position breakers."""
+    """Test panel leg power sums power for leg 1 breakers."""
     panel = deepcopy(MOCK_PANEL)
     b1 = deepcopy(MOCK_BREAKER_GEN1)
     b1.residential_breaker_panel_id = panel.id
-    b1.position = 1
+    b1.position = 1  # leg 1
     b1.power = 100
     b2 = deepcopy(MOCK_BREAKER_GEN2)
     b2.residential_breaker_panel_id = panel.id
-    b2.position = 2
+    b2.position = 3  # leg 2
     b2.power = 200
     data = LevitonData(breakers={b1.id: b1, b2.id: b2})
     result = _panel_leg_power(panel, data, 1)
@@ -544,15 +569,15 @@ def test_panel_leg_power_leg1() -> None:
 
 
 def test_panel_leg_power_leg2() -> None:
-    """Test panel leg power sums power for even-position breakers."""
+    """Test panel leg power sums power for leg 2 breakers."""
     panel = deepcopy(MOCK_PANEL)
     b1 = deepcopy(MOCK_BREAKER_GEN1)
     b1.residential_breaker_panel_id = panel.id
-    b1.position = 1
+    b1.position = 1  # leg 1
     b1.power = 100
     b2 = deepcopy(MOCK_BREAKER_GEN2)
     b2.residential_breaker_panel_id = panel.id
-    b2.position = 2
+    b2.position = 3  # leg 2
     b2.power = 200
     data = LevitonData(breakers={b1.id: b1, b2.id: b2})
     result = _panel_leg_power(panel, data, 2)
@@ -571,15 +596,15 @@ def test_panel_leg_power_no_breakers() -> None:
 
 
 def test_panel_leg_current_leg1() -> None:
-    """Test panel leg current sums current for odd-position breakers."""
+    """Test panel leg current sums current for leg 1 breakers."""
     panel = deepcopy(MOCK_PANEL)
     b1 = deepcopy(MOCK_BREAKER_GEN1)
     b1.residential_breaker_panel_id = panel.id
-    b1.position = 1
+    b1.position = 1  # leg 1
     b1.rms_current = 5
     b2 = deepcopy(MOCK_BREAKER_GEN2)
     b2.residential_breaker_panel_id = panel.id
-    b2.position = 2
+    b2.position = 3  # leg 2
     b2.rms_current = 10
     data = LevitonData(breakers={b1.id: b1, b2.id: b2})
     result = _panel_leg_current(panel, data, 1)
@@ -587,15 +612,15 @@ def test_panel_leg_current_leg1() -> None:
 
 
 def test_panel_leg_current_leg2() -> None:
-    """Test panel leg current sums current for even-position breakers."""
+    """Test panel leg current sums current for leg 2 breakers."""
     panel = deepcopy(MOCK_PANEL)
     b1 = deepcopy(MOCK_BREAKER_GEN1)
     b1.residential_breaker_panel_id = panel.id
-    b1.position = 1
+    b1.position = 1  # leg 1
     b1.rms_current = 5
     b2 = deepcopy(MOCK_BREAKER_GEN2)
     b2.residential_breaker_panel_id = panel.id
-    b2.position = 2
+    b2.position = 3  # leg 2
     b2.rms_current = 10
     data = LevitonData(breakers={b1.id: b1, b2.id: b2})
     result = _panel_leg_current(panel, data, 2)
@@ -618,13 +643,12 @@ def test_panel_frequency_leg1() -> None:
 
 
 def test_panel_frequency_leg2() -> None:
-    """Test panel frequency returns line_frequency_2 from first even-position breaker."""
+    """Test panel frequency returns line_frequency from first leg 2 breaker."""
     panel = deepcopy(MOCK_PANEL)
     breaker = deepcopy(MOCK_BREAKER_GEN2)
     breaker.residential_breaker_panel_id = panel.id
-    breaker.position = 2
-    breaker.line_frequency = 59.9
-    breaker.line_frequency_2 = 60.1
+    breaker.position = 3
+    breaker.line_frequency = 60.1
     data = LevitonData(breakers={breaker.id: breaker})
     result = _panel_frequency(panel, data, 2)
     assert result == 60.1

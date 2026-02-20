@@ -542,6 +542,38 @@ async def test_async_update_data_ws_connected_skips_poll(
     mock_client.get_whem.assert_not_called()
 
 
+async def test_async_update_data_ws_connected_polls_panels(
+    hass, mock_client
+) -> None:
+    """Test REST poll refreshes LDATA panels even when WS is connected."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    panel = deepcopy(MOCK_PANEL)
+    whem = deepcopy(MOCK_WHEM)
+    coordinator.data = LevitonData(
+        whems={whem.id: whem},
+        panels={panel.id: panel},
+        breakers={MOCK_BREAKER_GEN2.id: deepcopy(MOCK_BREAKER_GEN2)},
+    )
+    coordinator.ws = MagicMock()  # WS is connected
+
+    fresh_panel = deepcopy(MOCK_PANEL)
+    mock_client.get_panel = AsyncMock(return_value=fresh_panel)
+    mock_client.get_panel_breakers = AsyncMock(
+        return_value=[deepcopy(MOCK_BREAKER_GEN2)]
+    )
+
+    result = await coordinator._async_update_data()
+
+    # LDATA panels are polled even with WS up
+    mock_client.get_panel.assert_called_once_with(panel.id)
+    mock_client.get_panel_breakers.assert_called_once_with(panel.id)
+    # WHEMs are NOT polled when WS is connected
+    mock_client.get_whem.assert_not_called()
+    mock_client.get_whem_breakers.assert_not_called()
+    assert result is coordinator.data
+
+
 async def test_ws_watchdog_forces_reconnect_on_silence(
     hass, mock_client
 ) -> None:

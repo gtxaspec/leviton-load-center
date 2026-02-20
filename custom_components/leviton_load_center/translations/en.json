@@ -44,6 +44,22 @@
         "data": {
           "code": "Verification code"
         }
+      },
+      "options": {
+        "title": "Integration options",
+        "description": "Configure integration behavior. These can be changed later from the integration options.",
+        "data": {
+          "voltage_208": "208V electrical system",
+          "read_only": "Read-only mode (disable controls)",
+          "calculated_current": "Calculate current from power",
+          "hide_dummy": "Hide non-smart breakers"
+        },
+        "data_description": {
+          "voltage_208": "Enable for 208V commercial split-phase systems. Adjusts 2-pole voltage calculations from 240V to 208V.",
+          "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
+          "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
+          "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached."
+        }
       }
     },
     "error": {
@@ -73,7 +89,7 @@
           "voltage_208": "Enable for 208V commercial split-phase systems. Adjusts 2-pole voltage calculations from 240V to 208V.",
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
-          "hide_dummy": "Hide placeholder breakers (NONE-1/NONE-2) that don't have an LSBMA CT sensor attached."
+          "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached."
         }
       }
     }
@@ -91,9 +107,6 @@
       },
       "breaker_status": {
         "name": "Breaker status"
-      },
-      "operational_status": {
-        "name": "Operational status"
       },
       "remote_status": {
         "name": "Remote status"

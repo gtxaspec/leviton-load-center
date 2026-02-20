@@ -14,6 +14,11 @@ from .const import CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY, DOMAIN
 from .coordinator import LevitonCoordinator, LevitonData
 
 
+_BREAKER_OFFLINE_STATES = frozenset({
+    "NotCommunicating", "CommunicationFailure", "UNDEFINED",
+})
+
+
 class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
     """Base class for Leviton entities."""
 
@@ -40,9 +45,24 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
         """Return True if the entity's device is present in coordinator data."""
         if not super().available:
             return False
-        return self._device_id in getattr(
-            self.coordinator.data, self._collection
-        )
+        data = self.coordinator.data
+        if self._device_id not in getattr(data, self._collection):
+            return False
+        # Breaker entities: unavailable if parent hub is offline
+        if self._collection == "breakers":
+            breaker = data.breakers.get(self._device_id)
+            if breaker is not None:
+                if breaker.iot_whem_id:
+                    whem = data.whems.get(breaker.iot_whem_id)
+                    if whem is not None and not whem.connected:
+                        return False
+                elif breaker.residential_breaker_panel_id:
+                    panel = data.panels.get(
+                        breaker.residential_breaker_panel_id
+                    )
+                    if panel is not None and not panel.is_online:
+                        return False
+        return True
 
 
 def whem_device_info(whem_id: str, data: LevitonData) -> DeviceInfo:
@@ -90,7 +110,7 @@ def breaker_device_info(breaker_id: str, data: LevitonData) -> DeviceInfo:
         identifiers={(DOMAIN, breaker_id)},
         name=name,
         manufacturer="Leviton",
-        model=breaker.model,
+        model="Basic Breaker" if breaker.model in ("NONE", "NONE-1", "NONE-2") else breaker.model,
         sw_version=breaker.firmware_version_ble,
         hw_version=breaker.hw_version,
         serial_number=breaker.serial_number,

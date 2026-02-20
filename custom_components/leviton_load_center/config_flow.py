@@ -142,10 +142,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._email.lower().strip()
                 )
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=f"Leviton Load Center ({self._email})",
-                    data=self._entry_data(),
-                )
+                return await self.async_step_options()
 
         return self.async_show_form(
             step_id="user",
@@ -172,12 +169,45 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._email.lower().strip()
                 )
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=f"Leviton Load Center ({self._email})",
-                    data=self._entry_data(),
-                )
+                return await self.async_step_options()
 
         return self._show_2fa_form("2fa", errors)
+
+    async def async_step_options(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Handle the options step after login."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title=f"Leviton Load Center ({self._email})",
+                data=self._entry_data(),
+                options=user_input,
+            )
+
+        return self.async_show_form(
+            step_id="options",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_VOLTAGE_208,
+                        default=DEFAULT_VOLTAGE_208,
+                    ): bool,
+                    vol.Optional(
+                        CONF_READ_ONLY,
+                        default=DEFAULT_READ_ONLY,
+                    ): bool,
+                    vol.Optional(
+                        CONF_CALCULATED_CURRENT,
+                        default=DEFAULT_CALCULATED_CURRENT,
+                    ): bool,
+                    vol.Optional(
+                        CONF_HIDE_DUMMY,
+                        default=DEFAULT_HIDE_DUMMY,
+                    ): bool,
+                }
+            ),
+        )
 
     async def async_step_reauth(
         self,

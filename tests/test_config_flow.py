@@ -71,10 +71,24 @@ async def test_user_flow_success(hass: HomeAssistant) -> None:
             result["flow_id"],
             {CONF_EMAIL: MOCK_EMAIL, CONF_PASSWORD: MOCK_PASSWORD},
         )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "options"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_VOLTAGE_208: False,
+                CONF_READ_ONLY: False,
+                CONF_CALCULATED_CURRENT: False,
+                CONF_HIDE_DUMMY: True,
+            },
+        )
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["title"] == f"Leviton Load Center ({MOCK_EMAIL})"
         assert result["data"][CONF_EMAIL] == MOCK_EMAIL
         assert result["data"][CONF_PASSWORD] == MOCK_PASSWORD
+        assert result["options"][CONF_HIDE_DUMMY] is True
+        assert result["options"][CONF_VOLTAGE_208] is False
 
 
 async def test_user_flow_invalid_auth(hass: HomeAssistant) -> None:
@@ -187,6 +201,18 @@ async def test_2fa_flow_success(hass: HomeAssistant) -> None:
             result["flow_id"],
             {"code": "123456"},
         )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "options"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_VOLTAGE_208: False,
+                CONF_READ_ONLY: False,
+                CONF_CALCULATED_CURRENT: False,
+                CONF_HIDE_DUMMY: False,
+            },
+        )
         assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -234,6 +260,18 @@ async def test_duplicate_entry(hass: HomeAssistant) -> None:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {CONF_EMAIL: MOCK_EMAIL, CONF_PASSWORD: MOCK_PASSWORD},
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "options"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_VOLTAGE_208: False,
+                CONF_READ_ONLY: False,
+                CONF_CALCULATED_CURRENT: False,
+                CONF_HIDE_DUMMY: False,
+            },
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
 

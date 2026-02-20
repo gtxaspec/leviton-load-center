@@ -14,6 +14,7 @@ from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import (
     LevitonEntity,
+    _BREAKER_OFFLINE_STATES,
     breaker_device_info,
     should_include_breaker,
     whem_device_info,
@@ -77,6 +78,16 @@ class LevitonTripButton(LevitonEntity, ButtonEntity):
 
     _attr_device_class = ButtonDeviceClass.RESTART
 
+    @property
+    def available(self) -> bool:
+        """Return False when the breaker is offline."""
+        if not super().available:
+            return False
+        breaker = self.coordinator.data.breakers.get(self._device_id)
+        if breaker is None:
+            return False
+        return breaker.current_state not in _BREAKER_OFFLINE_STATES
+
     async def async_press(self) -> None:
         """Trip the breaker."""
         LOGGER.debug("Tripping breaker %s", self._device_id)
@@ -104,6 +115,16 @@ class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
 
     _attr_device_class = ButtonDeviceClass.IDENTIFY
     _collection = "whems"
+
+    @property
+    def available(self) -> bool:
+        """Return False when the WHEM is offline."""
+        if not super().available:
+            return False
+        whem = self.coordinator.data.whems.get(self._device_id)
+        if whem is None:
+            return False
+        return whem.connected
 
     async def async_press(self) -> None:
         """Blink the WHEM LED."""

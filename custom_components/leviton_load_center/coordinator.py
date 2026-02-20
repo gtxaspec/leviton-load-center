@@ -589,11 +589,18 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             )
 
     async def _async_bandwidth_keepalive(self, _now: Any) -> None:
-        """Send bandwidth=1 to WHEMs to keep CTs pushing at high frequency."""
+        """Toggle bandwidth 1→0→1 on WHEMs to trigger fresh CT data push.
+
+        The WHEM needs to see a 0→1 transition to push new readings.
+        Just sending 1 repeatedly doesn't trigger a refresh after the
+        initial auto-revert from 1 to 2.
+        """
         if self.ws is None:
             return
         for whem_id in self.data.whems:
             try:
+                await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
+                await self.client.set_whem_bandwidth(whem_id, bandwidth=0)
                 await self.client.set_whem_bandwidth(whem_id, bandwidth=1)
             except LevitonConnectionError:
                 LOGGER.warning("Bandwidth keepalive failed for WHEM %s", whem_id)
@@ -848,31 +855,41 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             )
 
     async def _async_update_data(self) -> LevitonData:
-        """Periodic REST polling - runs as fallback when WS is down.
+        """Periodic REST polling (every 10 minutes).
 
-        Normally WebSocket push keeps data fresh. This runs every 10 minutes
-        and skips if WS is connected (the watchdog handles silent-WS
-        detection and reconnection separately).
+        When WS is connected, WHEM data is fully pushed so only LDATA panels
+        need REST polling (WS delivers power/current but not energy for LDATA).
+        When WS is down, all devices are refreshed via REST.
         """
-        if self.ws is not None:
+        ws_connected = self.ws is not None
+
+        if ws_connected and not self.data.panels:
+            # WS covers everything, no LDATA panels to poll
             return self.data
 
-        LOGGER.debug("Running REST poll")
+        LOGGER.debug(
+            "Running REST poll (ws=%s, whems=%d, panels=%d)",
+            "up" if ws_connected else "down",
+            len(self.data.whems),
+            len(self.data.panels),
+        )
+
         try:
-            # Refresh WHEM hubs and their children
-            for whem_id in list(self.data.whems):
-                whem = await self.client.get_whem(whem_id)
-                self.data.whems[whem_id] = whem
+            # WHEM hubs: skip when WS is connected (fully pushed)
+            if not ws_connected:
+                for whem_id in list(self.data.whems):
+                    whem = await self.client.get_whem(whem_id)
+                    self.data.whems[whem_id] = whem
 
-                breakers = await self.client.get_whem_breakers(whem_id)
-                for breaker in breakers:
-                    self.data.breakers[breaker.id] = breaker
+                    breakers = await self.client.get_whem_breakers(whem_id)
+                    for breaker in breakers:
+                        self.data.breakers[breaker.id] = breaker
 
-                cts = await self.client.get_cts(whem_id)
-                for ct in cts:
-                    self.data.cts[str(ct.id)] = ct
+                    cts = await self.client.get_cts(whem_id)
+                    for ct in cts:
+                        self.data.cts[str(ct.id)] = ct
 
-            # Refresh DAU panels and their children
+            # DAU panels: always poll (WS only delivers power/current, not energy)
             for panel_id in list(self.data.panels):
                 panel = await self.client.get_panel(panel_id)
                 self.data.panels[panel_id] = panel

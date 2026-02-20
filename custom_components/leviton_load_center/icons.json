@@ -19,9 +19,6 @@
       "breaker_status": {
         "default": "mdi:electric-switch"
       },
-      "operational_status": {
-        "default": "mdi:list-status"
-      },
       "remote_status": {
         "default": "mdi:remote"
       },

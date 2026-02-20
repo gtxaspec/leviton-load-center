@@ -64,7 +64,7 @@ class LevitonBreakerSensorDescription(SensorEntityDescription):
 class LevitonCtSensorDescription(SensorEntityDescription):
     """Describe a Leviton CT sensor."""
 
-    value_fn: Callable[[Ct], Any]
+    value_fn: Callable[[Ct, LevitonData], Any]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,6 +93,37 @@ def _breaker_power(breaker: Breaker) -> int | None:
     return breaker.power
 
 
+_BREAKER_STATUS_MAP: dict[str, str] = {
+    "ManualON": "On",
+    "ManualOFF": "Off",
+    "COMMUNICATING": "Connecting",
+    "NotCommunicating": "Offline",
+    "CommunicationFailure": "Offline",
+    "UNDEFINED": "Offline",
+    "SoftwareTrip": "Software Trip",
+    "GFCIFault": "GFCI Fault",
+    "AFCIMiswire": "AFCI Miswire",
+    "AFCIParallelFault": "AFCI Fault",
+    "AFCISerialArc5AFault": "AFCI Fault",
+    "AFCISerialArc10AFault": "AFCI Fault",
+    "AFCISerialArc15AFault": "AFCI Fault",
+    "AFCISerialArc20AFault": "AFCI Fault",
+    "AFCISerialArc30AFault": "AFCI Fault",
+    "OverCurrentTripPhase1": "Overcurrent Trip",
+    "OverCurrentTripPhase2": "Overcurrent Trip",
+    "OverloadTrip": "Overload Trip",
+    "ShortCircuitTrip": "Short Circuit Trip",
+    "UpstreamFault": "Upstream Fault",
+}
+
+
+def _breaker_status(breaker: Breaker) -> str | None:
+    """Map raw currentState to a user-friendly display value."""
+    if breaker.current_state is None:
+        return None
+    return _BREAKER_STATUS_MAP.get(breaker.current_state, breaker.current_state)
+
+
 def _breaker_energy(breaker: Breaker) -> float | None:
     """Total lifetime energy across all poles of a breaker."""
     if breaker.energy_consumption is None:
@@ -105,10 +136,15 @@ def _breaker_energy(breaker: Breaker) -> float | None:
 
 
 def _breaker_leg(breaker: Breaker) -> str:
-    """Determine which leg a breaker is on based on position."""
+    """Determine which leg a breaker is on based on position.
+
+    Standard US split-phase panel: legs alternate in pairs of two.
+    Leg 1: positions 1,2, 5,6, 9,10, 13,14, 17,18, ...
+    Leg 2: positions 3,4, 7,8, 11,12, 15,16, 19,20, ...
+    """
     if breaker.poles == 2:
         return "Both"
-    if breaker.position % 2 == 1:
+    if ((breaker.position - 1) // 2) % 2 == 0:
         return "1"
     return "2"
 
@@ -143,9 +179,9 @@ def _calc_current(
             divisor = float(breaker.rms_voltage)
         elif breaker.iot_whem_id and breaker.iot_whem_id in data.whems:
             whem = data.whems[breaker.iot_whem_id]
-            if breaker.position % 2 == 1 and whem.rms_voltage_a:
+            if _is_on_leg(breaker.position, 1) and whem.rms_voltage_a:
                 divisor = float(whem.rms_voltage_a)
-            elif breaker.position % 2 == 0 and whem.rms_voltage_b:
+            elif _is_on_leg(breaker.position, 2) and whem.rms_voltage_b:
                 divisor = float(whem.rms_voltage_b)
 
     if divisor == 0:
@@ -292,19 +328,24 @@ def _panel_daily_energy(panel: Panel, data: LevitonData) -> float | None:
     return round(total, 2) if found else None
 
 
-def _panel_leg_power(panel: Panel, data: LevitonData, leg: int) -> int | None:
-    """Sum breaker power for a specific leg of a DAU panel.
+def _is_on_leg(position: int, leg: int) -> bool:
+    """Check if a breaker position is on the given leg (1 or 2).
 
-    Leg assignment: odd position = Leg 1, even position = Leg 2.
+    Leg 1: positions 1,2, 5,6, 9,10, 13,14, 17,18, ...
+    Leg 2: positions 3,4, 7,8, 11,12, 15,16, 19,20, ...
     """
+    on_leg1 = ((position - 1) // 2) % 2 == 0
+    return on_leg1 if leg == 1 else not on_leg1
+
+
+def _panel_leg_power(panel: Panel, data: LevitonData, leg: int) -> int | None:
+    """Sum breaker power for a specific leg of a DAU panel."""
     total = 0
     found = False
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id != panel.id:
             continue
-        if (leg == 1 and breaker.position % 2 == 1) or (
-            leg == 2 and breaker.position % 2 == 0
-        ):
+        if _is_on_leg(breaker.position, leg):
             total += breaker.power or 0
             found = True
     return total if found else None
@@ -319,9 +360,7 @@ def _panel_leg_current(
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id != panel.id:
             continue
-        if (leg == 1 and breaker.position % 2 == 1) or (
-            leg == 2 and breaker.position % 2 == 0
-        ):
+        if _is_on_leg(breaker.position, leg):
             total += breaker.rms_current or 0
             found = True
     return total if found else None
@@ -340,18 +379,18 @@ def _panel_frequency_avg(panel: Panel, data: LevitonData) -> float | None:
 def _panel_frequency(
     panel: Panel, data: LevitonData, leg: int
 ) -> float | None:
-    """Get line frequency from the first breaker on a leg of a DAU panel."""
+    """Get line frequency from the first breaker on a leg of a DAU panel.
+
+    Each breaker reports its own leg's frequency in line_frequency.
+    line_frequency_2 is the second pole of a 2-pole breaker, not the second leg.
+    """
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id != panel.id:
             continue
-        if leg == 1 and breaker.position % 2 == 1:
-            if breaker.line_frequency is not None:
-                return breaker.line_frequency
-        elif leg == 2 and breaker.position % 2 == 0:
-            if breaker.line_frequency_2 is not None:
-                return breaker.line_frequency_2
-            if breaker.line_frequency is not None:
-                return breaker.line_frequency
+        if not _is_on_leg(breaker.position, leg):
+            continue
+        if breaker.line_frequency:
+            return breaker.line_frequency
     return None
 
 
@@ -401,19 +440,15 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
     LevitonBreakerSensorDescription(
         key="breaker_status",
         translation_key="breaker_status",
-        value_fn=lambda b, _d, _o: b.current_state,
-        exists_fn=lambda b: b.is_smart,
-    ),
-    LevitonBreakerSensorDescription(
-        key="operational_status",
-        translation_key="operational_status",
-        value_fn=lambda b, _d, _o: b.operational_state,
+        value_fn=lambda b, _d, _o: _breaker_status(b),
         exists_fn=lambda b: b.is_smart,
     ),
     LevitonBreakerSensorDescription(
         key="remote_status",
         translation_key="remote_status",
-        value_fn=lambda b, _d, _o: b.remote_state,
+        value_fn=lambda b, _d, _o: {"RemoteON": "On", "RemoteOFF": "Off"}.get(
+            b.remote_state or ""
+        ),
         exists_fn=lambda b: b.is_gen2,
     ),
     # Diagnostics
@@ -491,6 +526,11 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
 
 # --- CT sensor descriptions ---
 
+def _ct_energy(ct: Ct) -> float:
+    """Total lifetime energy across both legs of a CT."""
+    return round((ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0), 3)
+
+
 CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
     LevitonCtSensorDescription(
         key="power",
@@ -498,7 +538,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda c: (c.active_power or 0) + (c.active_power_2 or 0),
+        value_fn=lambda c, _d: (c.active_power or 0) + (c.active_power_2 or 0),
     ),
     LevitonCtSensorDescription(
         key="current",
@@ -506,7 +546,18 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda c: (c.rms_current or 0) + (c.rms_current_2 or 0),
+        value_fn=lambda c, _d: (c.rms_current or 0) + (c.rms_current_2 or 0),
+    ),
+    LevitonCtSensorDescription(
+        key="energy",
+        translation_key="energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        value_fn=lambda c, d: LevitonCoordinator.calc_daily_energy(
+            f"ct_{c.id}", _ct_energy(c), d
+        ),
     ),
     # Diagnostics
     LevitonCtSensorDescription(
@@ -516,9 +567,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: round(
-            (c.energy_consumption or 0) + (c.energy_consumption_2 or 0), 3
-        ),
+        value_fn=lambda c, _d: _ct_energy(c),
     ),
     LevitonCtSensorDescription(
         key="current_leg1",
@@ -527,7 +576,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.rms_current,
+        value_fn=lambda c, _d: c.rms_current,
     ),
     LevitonCtSensorDescription(
         key="current_leg2",
@@ -536,7 +585,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.rms_current_2,
+        value_fn=lambda c, _d: c.rms_current_2,
     ),
     LevitonCtSensorDescription(
         key="power_leg1",
@@ -545,7 +594,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.active_power,
+        value_fn=lambda c, _d: c.active_power,
     ),
     LevitonCtSensorDescription(
         key="power_leg2",
@@ -554,7 +603,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.active_power_2,
+        value_fn=lambda c, _d: c.active_power_2,
     ),
     LevitonCtSensorDescription(
         key="lifetime_energy_import",
@@ -563,7 +612,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: round(
+        value_fn=lambda c, _d: round(
             (c.energy_import or 0) + (c.energy_import_2 or 0), 3
         ),
     ),
@@ -571,7 +620,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         key="usage_type",
         translation_key="usage_type",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.usage_type,
+        value_fn=lambda c, _d: c.usage_type,
     ),
 )
 
@@ -1048,7 +1097,7 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
         ct = self.coordinator.data.cts.get(self._device_id)
         if ct is None:
             return None
-        value = self.entity_description.value_fn(ct)
+        value = self.entity_description.value_fn(ct, self.coordinator.data)
         if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
             value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
         return value

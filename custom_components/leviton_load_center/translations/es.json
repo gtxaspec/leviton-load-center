@@ -44,6 +44,22 @@
         "data": {
           "code": "C\u00f3digo de verificaci\u00f3n"
         }
+      },
+      "options": {
+        "title": "Opciones de la integraci\u00f3n",
+        "description": "Configura el comportamiento de la integraci\u00f3n. Estas opciones se pueden cambiar m\u00e1s tarde desde las opciones de la integraci\u00f3n.",
+        "data": {
+          "voltage_208": "Sistema el\u00e9ctrico de 208V",
+          "read_only": "Modo solo lectura (desactivar controles)",
+          "calculated_current": "Calcular corriente a partir de la potencia",
+          "hide_dummy": "Ocultar interruptores no inteligentes"
+        },
+        "data_description": {
+          "voltage_208": "Activar para sistemas trif\u00e1sicos comerciales de 208V. Ajusta los c\u00e1lculos de voltaje bipolar de 240V a 208V.",
+          "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
+          "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
+          "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado."
+        }
       }
     },
     "error": {
@@ -73,7 +89,7 @@
           "voltage_208": "Activar para sistemas trif\u00e1sicos comerciales de 208V. Ajusta los c\u00e1lculos de voltaje bipolar de 240V a 208V.",
           "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
           "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
-          "hide_dummy": "Ocultar interruptores de marcador de posici\u00f3n (NONE-1/NONE-2) que no tienen un sensor CT LSBMA conectado."
+          "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado."
         }
       }
     }
@@ -91,9 +107,6 @@
       },
       "breaker_status": {
         "name": "Estado del interruptor"
-      },
-      "operational_status": {
-        "name": "Estado operacional"
       },
       "remote_status": {
         "name": "Estado remoto"

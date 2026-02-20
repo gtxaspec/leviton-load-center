@@ -14,9 +14,34 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_READ_ONLY, DEFAULT_READ_ONLY, DOMAIN, LOGGER
 from .coordinator import LevitonConfigEntry
-from .entity import LevitonEntity, breaker_device_info, should_include_breaker
+from .entity import (
+    LevitonEntity,
+    _BREAKER_OFFLINE_STATES,
+    breaker_device_info,
+    should_include_breaker,
+)
 
 PARALLEL_UPDATES = 1
+
+# States that indicate the breaker is physically off or tripped.
+# Communication states (NotCommunicating, CommunicationFailure, COMMUNICATING)
+# do NOT mean the breaker is off — they reflect panel-to-breaker link health.
+_BREAKER_OFF_STATES = frozenset({
+    "ManualOFF",
+    "SoftwareTrip",
+    "GFCIFault",
+    "AFCIMiswire",
+    "AFCIParallelFault",
+    "AFCISerialArc5AFault",
+    "AFCISerialArc10AFault",
+    "AFCISerialArc15AFault",
+    "AFCISerialArc20AFault",
+    "AFCISerialArc30AFault",
+    "OverCurrentTripPhase1",
+    "OverCurrentTripPhase2",
+    "OverloadTrip",
+    "ShortCircuitTrip",
+})
 
 BREAKER_SWITCH_DESCRIPTION = EntityDescription(
     key="breaker",
@@ -73,6 +98,16 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
     _attr_device_class = SwitchDeviceClass.SWITCH
 
     @property
+    def available(self) -> bool:
+        """Return False when the breaker is offline."""
+        if not super().available:
+            return False
+        breaker = self.coordinator.data.breakers.get(self._device_id)
+        if breaker is None:
+            return False
+        return breaker.current_state not in _BREAKER_OFFLINE_STATES
+
+    @property
     def is_on(self) -> bool | None:
         """Return True if the breaker is on."""
         breaker = self.coordinator.data.breakers.get(self._device_id)
@@ -84,8 +119,13 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
             return True
         if breaker.remote_state == "RemoteOFF":
             return False
-        # No remote command active — use physical state
-        return breaker.current_state == "ManualON"
+        # Only known off/trip states mean the breaker is off.
+        # Communication states (NotCommunicating, CommunicationFailure)
+        # don't change the physical breaker position.
+        if breaker.current_state in _BREAKER_OFF_STATES:
+            return False
+        # ManualON, COMMUNICATING, or communication states — breaker is on
+        return True
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the breaker."""
@@ -132,6 +172,16 @@ class LevitonBreakerSwitch(LevitonEntity, SwitchEntity):
 
 class LevitonBreakerIdentifySwitch(LevitonEntity, SwitchEntity):
     """Switch entity to toggle breaker LED identification."""
+
+    @property
+    def available(self) -> bool:
+        """Return False when the breaker is offline."""
+        if not super().available:
+            return False
+        breaker = self.coordinator.data.breakers.get(self._device_id)
+        if breaker is None:
+            return False
+        return breaker.current_state not in _BREAKER_OFFLINE_STATES
 
     @property
     def is_on(self) -> bool | None:
