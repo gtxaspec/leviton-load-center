@@ -13,33 +13,10 @@ from homeassistant.components.leviton_load_center.diagnostics import (
     TO_REDACT_BREAKER,
     TO_REDACT_PANEL,
     TO_REDACT_WHEM,
-    _redact_dict,
     async_get_config_entry_diagnostics,
 )
 
 from .conftest import MOCK_BREAKER_GEN1, MOCK_CT, MOCK_PANEL, MOCK_WHEM
-
-
-def test_redact_dict_redacts_keys() -> None:
-    """Test _redact_dict redacts specified keys."""
-    data = {"token": "secret123", "name": "Main Panel", "mac": "AA:BB:CC"}
-    result = _redact_dict(data, {"token", "mac"})
-    assert result["token"] == "**REDACTED**"
-    assert result["mac"] == "**REDACTED**"
-    assert result["name"] == "Main Panel"
-
-
-def test_redact_dict_no_matching_keys() -> None:
-    """Test _redact_dict with no keys to redact."""
-    data = {"name": "Test", "value": 42}
-    result = _redact_dict(data, {"secret"})
-    assert result == data
-
-
-def test_redact_dict_empty() -> None:
-    """Test _redact_dict with empty data."""
-    result = _redact_dict({}, {"token"})
-    assert result == {}
 
 
 def test_whem_redact_keys() -> None:

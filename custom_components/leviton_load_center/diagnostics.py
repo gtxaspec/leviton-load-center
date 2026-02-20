@@ -4,24 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.components.diagnostics import REDACTED
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.redact import async_redact_data
 
 from .coordinator import LevitonConfigEntry
 
 TO_REDACT_WHEM = {"token", "mac", "localIP", "regKey", "connectedNetwork"}
 TO_REDACT_PANEL = {"installerEmail", "installerPhoneNumber", "wifiSSID"}
 TO_REDACT_BREAKER = {"serialNumber"}
-
-
-def _redact_dict(data: dict[str, Any], keys_to_redact: set[str]) -> dict[str, Any]:
-    """Redact sensitive keys from a dictionary."""
-    result: dict[str, Any] = {}
-    for key, value in data.items():
-        if key in keys_to_redact:
-            result[key] = "**REDACTED**"
-        else:
-            result[key] = value
-    return result
 
 
 async def async_get_config_entry_diagnostics(
@@ -32,15 +23,15 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "whems": {
-            whem_id: _redact_dict(whem.raw, TO_REDACT_WHEM)
+            whem_id: async_redact_data(whem.raw, TO_REDACT_WHEM)
             for whem_id, whem in data.whems.items()
         },
         "panels": {
-            panel_id: _redact_dict(panel.raw, TO_REDACT_PANEL)
+            panel_id: async_redact_data(panel.raw, TO_REDACT_PANEL)
             for panel_id, panel in data.panels.items()
         },
         "breakers": {
-            breaker_id: _redact_dict(breaker.raw, TO_REDACT_BREAKER)
+            breaker_id: async_redact_data(breaker.raw, TO_REDACT_BREAKER)
             for breaker_id, breaker in data.breakers.items()
         },
         "cts": {
