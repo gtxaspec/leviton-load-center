@@ -206,11 +206,22 @@ def test_whem_total_power() -> None:
 
 
 def test_whem_total_power_no_cts() -> None:
-    """Test WHEM total power returns None with no CTs."""
+    """Test WHEM total power returns None with no CTs and no breakers."""
     whem = deepcopy(MOCK_WHEM)
     data = LevitonData()
     result = _whem_total_power(whem, data)
     assert result is None
+
+
+def test_whem_total_power_fallback_to_breakers() -> None:
+    """Test WHEM total power falls back to breaker sum when no CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _whem_total_power(whem, data)
+    # _breaker_power(b1)=120 + _breaker_power(b2)=204 = 324
+    assert result == 324
 
 
 def test_whem_total_current() -> None:
@@ -223,6 +234,17 @@ def test_whem_total_current() -> None:
     assert result == 14
 
 
+def test_whem_total_current_fallback_to_breakers() -> None:
+    """Test WHEM total current falls back to breaker sum when no CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _whem_total_current(whem, data)
+    # rms_current: b1=1 + b2=2 = 3
+    assert result == 3
+
+
 def test_whem_total_energy() -> None:
     """Test WHEM total energy sums CT energy values."""
     whem = deepcopy(MOCK_WHEM)
@@ -231,6 +253,17 @@ def test_whem_total_energy() -> None:
     result = _whem_total_energy(whem, data)
     # 5000.0 + 4500.0 = 9500.0
     assert result == 9500.0
+
+
+def test_whem_total_energy_fallback_to_breakers() -> None:
+    """Test WHEM total energy falls back to breaker sum when no CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
+    result = _whem_total_energy(whem, data)
+    # _breaker_energy(b1)=3402.017 + _breaker_energy(b2)=1500.0 = 4902.017
+    assert result == 4902.017
 
 
 def test_whem_leg_power() -> None:
@@ -518,6 +551,21 @@ def test_whem_daily_energy_no_matching_cts() -> None:
     )
     result = _whem_daily_energy(whem, data)
     assert result is None
+
+
+def test_whem_daily_energy_fallback_to_breakers() -> None:
+    """Test WHEM daily energy falls back to breaker sum when no CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    b1 = deepcopy(MOCK_BREAKER_GEN1)
+    b2 = deepcopy(MOCK_BREAKER_GEN2)
+    # b1 energy=3402.017 baseline=3400 → daily=2.02
+    # b2 energy=1500.0 baseline=1400 → daily=100.0
+    data = LevitonData(
+        breakers={b1.id: b1, b2.id: b2},
+        daily_baselines={b1.id: 3400.0, b2.id: 1400.0},
+    )
+    result = _whem_daily_energy(whem, data)
+    assert result == 102.02
 
 
 # --- Panel daily energy tests ---

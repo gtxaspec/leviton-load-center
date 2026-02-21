@@ -209,29 +209,41 @@ def _calc_current(
 
 
 def _whem_total_power(whem: Whem, data: LevitonData) -> int | None:
-    """Sum CT power for a WHEM hub."""
+    """Sum CT power for a WHEM hub, falling back to breaker sum."""
     total = 0
     found = False
     for ct in data.cts.values():
         if ct.iot_whem_id == whem.id:
             total += (ct.active_power or 0) + (ct.active_power_2 or 0)
             found = True
+    if found:
+        return total
+    for breaker in data.breakers.values():
+        if breaker.iot_whem_id == whem.id:
+            total += _breaker_power(breaker) or 0
+            found = True
     return total if found else None
 
 
 def _whem_total_current(whem: Whem, data: LevitonData) -> int | None:
-    """Sum CT current for a WHEM hub."""
+    """Sum CT current for a WHEM hub, falling back to breaker sum."""
     total = 0
     found = False
     for ct in data.cts.values():
         if ct.iot_whem_id == whem.id:
             total += (ct.rms_current or 0) + (ct.rms_current_2 or 0)
             found = True
+    if found:
+        return total
+    for breaker in data.breakers.values():
+        if breaker.iot_whem_id == whem.id:
+            total += breaker.rms_current or 0
+            found = True
     return total if found else None
 
 
 def _whem_total_energy(whem: Whem, data: LevitonData) -> float | None:
-    """Sum CT energy for a WHEM hub."""
+    """Sum CT energy for a WHEM hub, falling back to breaker sum."""
     total = 0.0
     found = False
     for ct in data.cts.values():
@@ -240,11 +252,17 @@ def _whem_total_energy(whem: Whem, data: LevitonData) -> float | None:
                 ct.energy_consumption_2 or 0
             )
             found = True
+    if found:
+        return round(total, 3)
+    for breaker in data.breakers.values():
+        if breaker.iot_whem_id == whem.id:
+            total += _breaker_energy(breaker) or 0
+            found = True
     return round(total, 3) if found else None
 
 
 def _whem_daily_energy(whem: Whem, data: LevitonData) -> float | None:
-    """Sum CT daily energy for a WHEM hub."""
+    """Sum CT daily energy for a WHEM hub, falling back to breaker sum."""
     total = 0.0
     found = False
     for ct in data.cts.values():
@@ -256,6 +274,14 @@ def _whem_daily_energy(whem: Whem, data: LevitonData) -> float | None:
             if baseline is not None:
                 daily = ct_total - baseline
                 total += max(0.0, daily)
+                found = True
+    if found:
+        return round(total, 2)
+    for breaker in data.breakers.values():
+        if breaker.iot_whem_id == whem.id:
+            daily = calc_daily_energy(breaker.id, _breaker_energy(breaker), data)
+            if daily is not None:
+                total += daily
                 found = True
     return round(total, 2) if found else None
 
