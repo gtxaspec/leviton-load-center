@@ -19,13 +19,13 @@ from .conftest import MOCK_BREAKER_GEN1, MOCK_CT, MOCK_PANEL, MOCK_WHEM
 async def test_diagnostics_output(hass) -> None:
     """Test diagnostics returns expected structure with redacted data."""
     whem = deepcopy(MOCK_WHEM)
-    whem.raw = {"id": whem.id, "name": "Test", "mac": "AA:BB:CC", "token": "secret"}
+    whem.raw = {"id": whem.id, "name": "Test", "mac": "AA:BB:CC", "token": "secret", "serial": "1000_ABCD_EF01"}
     panel = deepcopy(MOCK_PANEL)
     panel.raw = {"id": panel.id, "wifiSSID": "MyNetwork"}
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.raw = {"id": breaker.id, "serialNumber": "SN123", "power": 120}
     ct = deepcopy(MOCK_CT)
-    ct.raw = {"id": ct.id, "activePower": 196}
+    ct.raw = {"id": ct.id, "activePower": 196, "serial": "1000_ABCD_EF01"}
 
     data = LevitonData(
         whems={whem.id: whem},
@@ -54,6 +54,7 @@ async def test_diagnostics_output(hass) -> None:
     whem_diag = result["whems"][whem.id]
     assert whem_diag["mac"] == "**REDACTED**"
     assert whem_diag["token"] == "**REDACTED**"
+    assert whem_diag["serial"] == "**REDACTED**"
     assert whem_diag["name"] == "Test"
 
     # Check panel redaction
@@ -65,6 +66,7 @@ async def test_diagnostics_output(hass) -> None:
     assert breaker_diag["serialNumber"] == "**REDACTED**"
     assert breaker_diag["power"] == 120
 
-    # Check CTs are not redacted (no sensitive fields)
+    # Check CT redaction
     ct_diag = result["cts"][str(ct.id)]
+    assert ct_diag["serial"] == "**REDACTED**"
     assert ct_diag["activePower"] == 196

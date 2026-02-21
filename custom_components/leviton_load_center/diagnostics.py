@@ -9,9 +9,10 @@ from homeassistant.helpers.redact import async_redact_data
 
 from .coordinator import LevitonConfigEntry
 
-TO_REDACT_WHEM = {"token", "mac", "localIP", "regKey", "connectedNetwork"}
+TO_REDACT_WHEM = {"token", "mac", "localIP", "regKey", "connectedNetwork", "serial"}
 TO_REDACT_PANEL = {"installerEmail", "installerPhoneNumber", "wifiSSID"}
 TO_REDACT_BREAKER = {"serialNumber"}
+TO_REDACT_CT = {"serial"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -34,7 +35,7 @@ async def async_get_config_entry_diagnostics(
             for breaker_id, breaker in data.breakers.items()
         },
         "cts": {
-            ct_id: ct.raw
+            ct_id: async_redact_data(ct.raw, TO_REDACT_CT)
             for ct_id, ct in data.cts.items()
         },
     }
