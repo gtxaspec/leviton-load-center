@@ -7,7 +7,7 @@ Home Assistant integration for the [Leviton Smart Load Center](https://www.levit
 Supports both hub types and accessories:
 - **LWHEM** (Whole Home Energy Module) — with smart breakers and CT clamps
 - **LDATA** (Data Acquisition Unit) — older generation, smart breakers only
-- **LSBMA** (Standalone Bluetooth CT Clamp) — individual circuit monitoring via LWHEM
+- **LSBMA** (Standalone Bluetooth CT Clamp) — individual circuit monitoring via LWHEM or LDATA
 
 ## Features
 
