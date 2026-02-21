@@ -164,11 +164,15 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     "  WHEM %s: %s (FW %s)", whem.id, whem.name, whem.version
                 )
                 self.data.whems[whem.id] = whem
-                # Reset bandwidth before fetching CTs so the REST API
-                # returns lifetime energy (not deltas from a previous
-                # session that left bandwidth=1 active). The WHEM needs
-                # a brief delay to process the change — without it, CTs
-                # return delta values that corrupt daily baselines.
+                # REQUIRED DELAY: The WHEM firmware switches energy reporting
+                # mode based on bandwidth state. bandwidth=1 makes the API
+                # return period deltas instead of lifetime totals. A previous
+                # session may have left bandwidth=1 active, so we reset to 0
+                # before fetching CTs. The 1s delay is necessary because the
+                # WHEM processes bandwidth changes asynchronously — without
+                # it, the subsequent GET still returns delta values, which
+                # corrupts daily energy baselines and produces wrong readings
+                # until the next midnight reset. Verified on FW 1.7.6–2.0.13.
                 try:
                     await self.client.set_whem_bandwidth(whem.id, bandwidth=0)
                     await asyncio.sleep(1)
@@ -226,7 +230,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     panel.id, panel.name, panel.package_ver,
                 )
                 self.data.panels[panel.id] = panel
-                # Reset bandwidth before fetching breakers.
+                # REQUIRED DELAY: Same as WHEM above — the LDATA firmware
+                # needs time to apply the bandwidth change before the next
+                # REST call returns correct lifetime energy values.
                 try:
                     await self.client.set_panel_bandwidth(
                         panel.id, enabled=False
