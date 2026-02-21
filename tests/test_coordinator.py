@@ -19,7 +19,15 @@ from homeassistant.components.leviton_load_center.coordinator import (
     LevitonCoordinator,
     LevitonData,
 )
-from homeassistant.components.leviton_load_center.energy import EnergyTracker
+from homeassistant.components.leviton_load_center.energy import (
+    EnergyTracker,
+    accumulate_breaker_energy,
+    accumulate_ct_energy,
+    calc_daily_energy,
+)
+from homeassistant.components.leviton_load_center.websocket import (
+    needs_individual_breaker_subs,
+)
 
 from .conftest import (
     MOCK_AUTH_TOKEN,
@@ -129,7 +137,7 @@ async def test_ws_notification_whem_breaker_update(hass, mock_client) -> None:
         },
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.breakers[MOCK_BREAKER_GEN1.id].power == 500
 
@@ -153,7 +161,7 @@ async def test_ws_notification_whem_ct_update(hass, mock_client) -> None:
         },
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.cts[str(MOCK_CT.id)].active_power == 999
 
@@ -172,7 +180,7 @@ async def test_ws_notification_whem_own_update(hass, mock_client) -> None:
         "data": {"rmsVoltageA": 121, "connected": False},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.whems[MOCK_WHEM.id].rms_voltage_a == 121
     assert coordinator.data.whems[MOCK_WHEM.id].connected is False
@@ -197,7 +205,7 @@ async def test_ws_notification_panel_breaker_update(hass, mock_client) -> None:
         },
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.breakers[MOCK_BREAKER_GEN2.id].power == 300
 
@@ -216,7 +224,7 @@ async def test_ws_notification_panel_own_update(hass, mock_client) -> None:
         "data": {"rmsVoltage": 118},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.panels[MOCK_PANEL.id].rms_voltage == 118
 
@@ -235,7 +243,7 @@ async def test_ws_notification_direct_breaker_update(hass, mock_client) -> None:
         "data": {"currentState": "Tripped"},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.breakers[MOCK_BREAKER_GEN1.id].current_state == "Tripped"
 
@@ -254,7 +262,7 @@ async def test_ws_notification_direct_ct_update(hass, mock_client) -> None:
         "data": {"activePower": 250},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.cts[str(MOCK_CT.id)].active_power == 250
 
@@ -272,7 +280,7 @@ async def test_ws_notification_unknown_model_ignored(hass, mock_client) -> None:
     }
 
     # Should not raise
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
 
 async def test_ws_notification_empty_data_ignored(hass, mock_client) -> None:
@@ -287,22 +295,22 @@ async def test_ws_notification_empty_data_ignored(hass, mock_client) -> None:
         "data": {},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
 
 async def test_ws_disconnect_handler(hass, mock_client) -> None:
     """Test WebSocket disconnect handler clears ws and callback references."""
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
-    coordinator.ws = MagicMock()
-    coordinator._ws_remove_notification = MagicMock()
-    coordinator._ws_remove_disconnect = MagicMock()
+    coordinator.ws_manager.ws = MagicMock()
+    coordinator.ws_manager._ws_remove_notification = MagicMock()
+    coordinator.ws_manager._ws_remove_disconnect = MagicMock()
 
-    coordinator._handle_ws_disconnect()
+    coordinator.ws_manager._handle_ws_disconnect()
 
-    assert coordinator.ws is None
-    assert coordinator._ws_remove_notification is None
-    assert coordinator._ws_remove_disconnect is None
+    assert coordinator.ws_manager.ws is None
+    assert coordinator.ws_manager._ws_remove_notification is None
+    assert coordinator.ws_manager._ws_remove_disconnect is None
     # Close the coroutine created by _handle_ws_disconnect to avoid
     # "coroutine was never awaited" warning during GC.
     coro = entry.async_create_background_task.call_args[0][1]
@@ -351,12 +359,12 @@ async def test_async_shutdown_disconnects_ws(hass, mock_client) -> None:
 
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
+    coordinator.ws_manager.ws = mock_ws
 
     mock_remove_notif = MagicMock()
     mock_remove_disc = MagicMock()
-    coordinator._ws_remove_notification = mock_remove_notif
-    coordinator._ws_remove_disconnect = mock_remove_disc
+    coordinator.ws_manager._ws_remove_notification = mock_remove_notif
+    coordinator.ws_manager._ws_remove_disconnect = mock_remove_disc
 
     await coordinator.async_shutdown()
 
@@ -366,10 +374,10 @@ async def test_async_shutdown_disconnects_ws(hass, mock_client) -> None:
         MOCK_PANEL.id, enabled=False
     )
     mock_ws.disconnect.assert_called_once()
-    assert coordinator.ws is None
+    assert coordinator.ws_manager.ws is None
     # Remove functions are nulled out so a second call is safe
-    assert coordinator._ws_remove_notification is None
-    assert coordinator._ws_remove_disconnect is None
+    assert coordinator.ws_manager._ws_remove_notification is None
+    assert coordinator.ws_manager._ws_remove_disconnect is None
 
 
 async def test_async_shutdown_idempotent(hass, mock_client) -> None:
@@ -382,9 +390,9 @@ async def test_async_shutdown_idempotent(hass, mock_client) -> None:
 
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
-    coordinator._ws_remove_notification = MagicMock()
-    coordinator._ws_remove_disconnect = MagicMock()
+    coordinator.ws_manager.ws = mock_ws
+    coordinator.ws_manager._ws_remove_notification = MagicMock()
+    coordinator.ws_manager._ws_remove_disconnect = MagicMock()
 
     await coordinator.async_shutdown()
     # Second call must not raise
@@ -495,7 +503,7 @@ def test_needs_individual_breaker_subs_fw_2x() -> None:
 
     whem = deepcopy(MOCK_WHEM)
     whem.version = "2.0.13"
-    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is True
+    assert needs_individual_breaker_subs(whem) is True
 
 
 def test_needs_individual_breaker_subs_fw_1x() -> None:
@@ -504,7 +512,7 @@ def test_needs_individual_breaker_subs_fw_1x() -> None:
 
     whem = deepcopy(MOCK_WHEM)
     whem.version = "1.7.6"
-    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is False
+    assert needs_individual_breaker_subs(whem) is False
 
 
 def test_needs_individual_breaker_subs_fw_none() -> None:
@@ -513,7 +521,7 @@ def test_needs_individual_breaker_subs_fw_none() -> None:
 
     whem = deepcopy(MOCK_WHEM)
     whem.version = None
-    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is True
+    assert needs_individual_breaker_subs(whem) is True
 
 
 def test_needs_individual_breaker_subs_fw_unparseable() -> None:
@@ -522,7 +530,7 @@ def test_needs_individual_breaker_subs_fw_unparseable() -> None:
 
     whem = deepcopy(MOCK_WHEM)
     whem.version = "invalid"
-    assert LevitonCoordinator._needs_individual_breaker_subs(whem) is True
+    assert needs_individual_breaker_subs(whem) is True
 
 
 # --- REST poll skip test ---
@@ -537,7 +545,7 @@ async def test_async_update_data_ws_connected_skips_poll(
     coordinator.data = LevitonData(
         whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
     )
-    coordinator.ws = MagicMock()  # WS is connected
+    coordinator.ws_manager.ws = MagicMock()  # WS is connected
 
     result = await coordinator._async_update_data()
 
@@ -558,7 +566,7 @@ async def test_async_update_data_ws_connected_polls_panels(
         panels={panel.id: panel},
         breakers={MOCK_BREAKER_GEN2.id: deepcopy(MOCK_BREAKER_GEN2)},
     )
-    coordinator.ws = MagicMock()  # WS is connected
+    coordinator.ws_manager.ws = MagicMock()  # WS is connected
 
     fresh_panel = deepcopy(MOCK_PANEL)
     mock_client.get_panel = AsyncMock(return_value=fresh_panel)
@@ -586,15 +594,15 @@ async def test_ws_watchdog_forces_reconnect_on_silence(
     coordinator.data = LevitonData()
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
+    coordinator.ws_manager.ws = mock_ws
     # Simulate last notification >90s ago
-    coordinator._last_ws_notification = time.monotonic() - 120
+    coordinator.ws_manager._last_ws_notification = time.monotonic() - 120
 
-    await coordinator._async_ws_watchdog(None)
+    await coordinator.ws_manager._async_ws_watchdog(None)
 
     # Stale WS was disconnected
     mock_ws.disconnect.assert_called_once()
-    assert coordinator.ws is None
+    assert coordinator.ws_manager.ws is None
     # Reconnection was triggered
     entry.async_create_background_task.assert_called_once()
     # Close the leaked coroutine
@@ -611,15 +619,15 @@ async def test_ws_watchdog_no_action_when_fresh(
     coordinator.data = LevitonData()
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
+    coordinator.ws_manager.ws = mock_ws
     # Recent notification
-    coordinator._last_ws_notification = time.monotonic() - 10
+    coordinator.ws_manager._last_ws_notification = time.monotonic() - 10
 
-    await coordinator._async_ws_watchdog(None)
+    await coordinator.ws_manager._async_ws_watchdog(None)
 
     # WS was not touched
     mock_ws.disconnect.assert_not_called()
-    assert coordinator.ws is mock_ws
+    assert coordinator.ws_manager.ws is mock_ws
 
 
 # --- calc_daily_energy tests ---
@@ -628,7 +636,7 @@ async def test_ws_watchdog_no_action_when_fresh(
 def test_calc_daily_energy_normal() -> None:
     """Test daily energy calculation (lifetime - baseline) rounded."""
     data = LevitonData(daily_baselines={"breaker_1": 100.0})
-    result = LevitonCoordinator.calc_daily_energy("breaker_1", 150.123, data)
+    result = calc_daily_energy("breaker_1", 150.123, data)
     assert result == 50.12
 
 
@@ -636,9 +644,9 @@ def test_calc_daily_energy_none_inputs() -> None:
     """Test daily energy returns None for None lifetime or missing baseline."""
     data = LevitonData(daily_baselines={"breaker_1": 100.0})
     # None lifetime
-    assert LevitonCoordinator.calc_daily_energy("breaker_1", None, data) is None
+    assert calc_daily_energy("breaker_1", None, data) is None
     # Missing baseline
-    assert LevitonCoordinator.calc_daily_energy("breaker_2", 150.0, data) is None
+    assert calc_daily_energy("breaker_2", 150.0, data) is None
 
 
 async def test_async_update_data_rest_poll_refreshes(hass, mock_client) -> None:
@@ -653,7 +661,7 @@ async def test_async_update_data_rest_poll_refreshes(hass, mock_client) -> None:
         breakers={MOCK_BREAKER_GEN1.id: deepcopy(MOCK_BREAKER_GEN1)},
         cts={str(MOCK_CT.id): deepcopy(MOCK_CT)},
     )
-    coordinator.ws = None  # WS is disconnected
+    coordinator.ws_manager.ws = None  # WS is disconnected
     coordinator._residence_ids = [MOCK_RESIDENCE.id]
 
     # Set up fresh return values to verify data gets replaced
@@ -696,7 +704,7 @@ def test_accumulate_breaker_energy_adds_delta() -> None:
         "power": 120,
     }
 
-    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+    accumulate_breaker_energy(ws_data, breaker)
 
     assert ws_data["energyConsumption"] == 3400.5
     assert ws_data["energyConsumption2"] == 100.1
@@ -712,7 +720,7 @@ def test_accumulate_breaker_energy_none_current() -> None:
 
     ws_data = {"energyConsumption": 0.5}
 
-    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+    accumulate_breaker_energy(ws_data, breaker)
 
     assert ws_data["energyConsumption"] == 0.5
 
@@ -724,7 +732,7 @@ def test_accumulate_breaker_energy_no_energy_fields() -> None:
 
     ws_data = {"power": 120, "rmsCurrent": 1}
 
-    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+    accumulate_breaker_energy(ws_data, breaker)
 
     # No energy fields modified
     assert "energyConsumption" not in ws_data
@@ -738,7 +746,7 @@ def test_accumulate_breaker_energy_lifetime_passthrough() -> None:
 
     ws_data = {"energyConsumption": 3400.5}
 
-    LevitonCoordinator._accumulate_breaker_energy(ws_data, breaker)
+    accumulate_breaker_energy(ws_data, breaker)
 
     # Value exceeds current — left as-is (lifetime replacement)
     assert ws_data["energyConsumption"] == 3400.5
@@ -751,7 +759,7 @@ def test_accumulate_ct_energy_lifetime_passthrough() -> None:
 
     ws_data = {"energyConsumption": 5001.0}
 
-    LevitonCoordinator._accumulate_ct_energy(ws_data, ct)
+    accumulate_ct_energy(ws_data, ct)
 
     assert ws_data["energyConsumption"] == 5001.0
 
@@ -771,7 +779,7 @@ def test_accumulate_ct_energy_adds_delta() -> None:
         "energyImport2": 0.05,
     }
 
-    LevitonCoordinator._accumulate_ct_energy(ws_data, ct)
+    accumulate_ct_energy(ws_data, ct)
 
     assert ws_data["energyConsumption"] == 5001.0
     assert ws_data["energyConsumption2"] == 4500.5
@@ -800,7 +808,7 @@ def test_ws_breaker_energy_accumulated_via_whem(hass, mock_client) -> None:
         },
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.25
 
@@ -821,7 +829,7 @@ def test_ws_breaker_energy_accumulated_direct(hass, mock_client) -> None:
         "data": {"energyConsumption": 0.1},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.breakers[breaker.id].energy_consumption == 1500.1
 
@@ -842,7 +850,7 @@ def test_ws_ct_energy_accumulated(hass, mock_client) -> None:
         "data": {"energyConsumption": 0.5},
     }
 
-    coordinator._handle_ws_notification(notification)
+    coordinator.ws_manager._handle_ws_notification(notification)
 
     assert coordinator.data.cts[str(ct.id)].energy_consumption == 5000.5
 
@@ -858,17 +866,17 @@ async def test_correct_energy_values_detects_deltas(hass, mock_client) -> None:
     )
 
     # Simulate cached lifetime from previous session
-    coordinator._lifetime_store = MagicMock()
-    coordinator._lifetime_store.async_load = AsyncMock(
+    coordinator.energy._lifetime_store = MagicMock()
+    coordinator.energy._lifetime_store.async_load = AsyncMock(
         return_value={breaker.id: 3400.0}
     )
-    coordinator._lifetime_store.async_save = AsyncMock()
+    coordinator.energy._lifetime_store.async_save = AsyncMock()
 
-    await coordinator._correct_energy_values()
+    await coordinator.energy.correct_energy_values(coordinator.data)
 
     # Should be corrected: cached + delta
     assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.25
-    coordinator._lifetime_store.async_save.assert_called_once()
+    coordinator.energy._lifetime_store.async_save.assert_called_once()
 
 
 async def test_correct_energy_values_lifetime_passthrough(hass, mock_client) -> None:
@@ -882,13 +890,13 @@ async def test_correct_energy_values_lifetime_passthrough(hass, mock_client) -> 
     )
 
     # Cached value is lower (previous session)
-    coordinator._lifetime_store = MagicMock()
-    coordinator._lifetime_store.async_load = AsyncMock(
+    coordinator.energy._lifetime_store = MagicMock()
+    coordinator.energy._lifetime_store.async_load = AsyncMock(
         return_value={breaker.id: 3400.0}
     )
-    coordinator._lifetime_store.async_save = AsyncMock()
+    coordinator.energy._lifetime_store.async_save = AsyncMock()
 
-    await coordinator._correct_energy_values()
+    await coordinator.energy.correct_energy_values(coordinator.data)
 
     # Should be unchanged (REST value is lifetime, not delta)
     assert coordinator.data.breakers[breaker.id].energy_consumption == 3410.0
@@ -905,15 +913,15 @@ async def test_correct_energy_values_first_run(hass, mock_client) -> None:
     )
 
     # No cached values
-    coordinator._lifetime_store = MagicMock()
-    coordinator._lifetime_store.async_load = AsyncMock(return_value=None)
-    coordinator._lifetime_store.async_save = AsyncMock()
+    coordinator.energy._lifetime_store = MagicMock()
+    coordinator.energy._lifetime_store.async_load = AsyncMock(return_value=None)
+    coordinator.energy._lifetime_store.async_save = AsyncMock()
 
-    await coordinator._correct_energy_values()
+    await coordinator.energy.correct_energy_values(coordinator.data)
 
     # Should be unchanged, and value cached
     assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.0
-    coordinator._lifetime_store.async_save.assert_called_once()
+    coordinator.energy._lifetime_store.async_save.assert_called_once()
 
 
 async def test_async_setup_full_flow(
@@ -939,7 +947,7 @@ async def test_async_setup_full_flow(
     assert MOCK_RESIDENCE.id in coordinator.data.residences
 
     # 2. WebSocket connected and subscribed
-    assert coordinator.ws is not None
+    assert coordinator.ws_manager.ws is not None
     mock_websocket.connect.assert_called_once()
     # Subscribed to WHEM + panel at minimum
     assert mock_websocket.subscribe.call_count >= 2
@@ -1003,7 +1011,7 @@ async def test_async_setup_ws_failure_degrades_gracefully(
 
     # Setup succeeded despite WS failure
     assert MOCK_WHEM.id in coordinator.data.whems
-    assert coordinator.ws is None  # WS not available
+    assert coordinator.ws_manager.ws is None  # WS not available
     assert len(coordinator.data.daily_baselines) > 0  # baselines still set
 
 
@@ -1095,11 +1103,11 @@ async def test_ws_refresh_reconnects(hass, mock_client) -> None:
     )
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
-    coordinator._ws_remove_disconnect = MagicMock()
-    coordinator._ws_remove_notification = MagicMock()
+    coordinator.ws_manager.ws = mock_ws
+    coordinator.ws_manager._ws_remove_disconnect = MagicMock()
+    coordinator.ws_manager._ws_remove_notification = MagicMock()
 
-    await coordinator._async_ws_refresh(None)
+    await coordinator.ws_manager._async_ws_refresh(None)
 
     # Old WS was disconnected
     mock_ws.disconnect.assert_called_once()
@@ -1112,9 +1120,9 @@ async def test_ws_refresh_noop_when_disconnected(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData()
-    coordinator.ws = None
+    coordinator.ws_manager.ws = None
 
-    await coordinator._async_ws_refresh(None)
+    await coordinator.ws_manager._async_ws_refresh(None)
 
     # No WS operations attempted
     mock_client.create_websocket.assert_not_called()
@@ -1131,9 +1139,9 @@ async def test_bandwidth_keepalive_toggles(hass, mock_client) -> None:
     coordinator = _make_coordinator(hass, entry, mock_client)
     whem = deepcopy(MOCK_WHEM)
     coordinator.data = LevitonData(whems={whem.id: whem})
-    coordinator.ws = MagicMock()
+    coordinator.ws_manager.ws = MagicMock()
 
-    await coordinator._async_bandwidth_keepalive(None)
+    await coordinator.ws_manager._async_bandwidth_keepalive(None)
 
     assert mock_client.set_whem_bandwidth.call_args_list == [
         call(whem.id, bandwidth=1),
@@ -1147,9 +1155,9 @@ async def test_bandwidth_keepalive_noop_when_disconnected(hass, mock_client) -> 
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
-    coordinator.ws = None
+    coordinator.ws_manager.ws = None
 
-    await coordinator._async_bandwidth_keepalive(None)
+    await coordinator.ws_manager._async_bandwidth_keepalive(None)
 
     mock_client.set_whem_bandwidth.assert_not_called()
 
@@ -1159,13 +1167,13 @@ async def test_bandwidth_keepalive_handles_error(hass, mock_client) -> None:
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
-    coordinator.ws = MagicMock()
+    coordinator.ws_manager.ws = MagicMock()
     mock_client.set_whem_bandwidth = AsyncMock(
         side_effect=LevitonConnectionError("fail")
     )
 
     # Should not raise
-    await coordinator._async_bandwidth_keepalive(None)
+    await coordinator.ws_manager._async_bandwidth_keepalive(None)
 
 
 # --- _reconnect_websocket tests ---
@@ -1178,10 +1186,10 @@ async def test_reconnect_succeeds_on_first_attempt(hass, mock_client) -> None:
     coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
 
     with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
-        await coordinator._reconnect_websocket()
+        await coordinator.ws_manager._reconnect()
 
-    assert coordinator._reconnecting is False
-    assert coordinator.ws is not None
+    assert coordinator.ws_manager._reconnecting is False
+    assert coordinator.ws_manager.ws is not None
 
 
 async def test_reconnect_retries_on_connection_error(hass, mock_client) -> None:
@@ -1202,9 +1210,9 @@ async def test_reconnect_retries_on_connection_error(hass, mock_client) -> None:
     )
 
     with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
-        await coordinator._reconnect_websocket()
+        await coordinator.ws_manager._reconnect()
 
-    assert coordinator._reconnecting is False
+    assert coordinator.ws_manager._reconnecting is False
     # Got through 2 failures + successful connect
     assert mock_client.get_permissions.call_count >= 3
 
@@ -1220,10 +1228,10 @@ async def test_reconnect_auth_error_triggers_reauth(hass, mock_client) -> None:
     )
 
     with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
-        await coordinator._reconnect_websocket()
+        await coordinator.ws_manager._reconnect()
 
     entry.async_start_reauth.assert_called_once()
-    assert coordinator._reconnecting is False
+    assert coordinator.ws_manager._reconnecting is False
 
 
 async def test_reconnect_all_attempts_fail(hass, mock_client) -> None:
@@ -1244,10 +1252,10 @@ async def test_reconnect_all_attempts_fail(hass, mock_client) -> None:
     mock_client.create_websocket = MagicMock(return_value=mock_ws)
 
     with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
-        await coordinator._reconnect_websocket()
+        await coordinator.ws_manager._reconnect()
 
-    assert coordinator._reconnecting is False
-    assert coordinator.ws is None
+    assert coordinator.ws_manager._reconnecting is False
+    assert coordinator.ws_manager.ws is None
 
 
 async def test_ws_connect_whem_sub_failure(hass, mock_client, mock_websocket) -> None:
@@ -1259,10 +1267,10 @@ async def test_ws_connect_whem_sub_failure(hass, mock_client, mock_websocket) ->
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
 
-    await coordinator._connect_websocket()
+    await coordinator.ws_manager.connect()
 
     # WS connected despite WHEM subscription failure
-    assert coordinator.ws is not None
+    assert coordinator.ws_manager.ws is not None
 
 
 async def test_ws_connect_panel_sub_failure(hass, mock_client, mock_websocket) -> None:
@@ -1274,9 +1282,9 @@ async def test_ws_connect_panel_sub_failure(hass, mock_client, mock_websocket) -
     coordinator = _make_coordinator(hass, entry, mock_client)
     coordinator.data = LevitonData(panels={MOCK_PANEL.id: deepcopy(MOCK_PANEL)})
 
-    await coordinator._connect_websocket()
+    await coordinator.ws_manager.connect()
 
-    assert coordinator.ws is not None
+    assert coordinator.ws_manager.ws is not None
 
 
 async def test_ws_connect_fw2_individual_breaker_subs(
@@ -1295,7 +1303,7 @@ async def test_ws_connect_fw2_individual_breaker_subs(
         breakers={breaker.id: breaker, breaker_other.id: breaker_other},
     )
 
-    await coordinator._connect_websocket()
+    await coordinator.ws_manager.connect()
 
     subscribe_calls = [call.args for call in mock_websocket.subscribe.call_args_list]
     assert ("IotWhem", whem.id) in subscribe_calls
@@ -1330,10 +1338,10 @@ async def test_ws_connect_breaker_sub_failure(
 
     mock_websocket.subscribe = AsyncMock(side_effect=selective_fail)
 
-    await coordinator._connect_websocket()
+    await coordinator.ws_manager.connect()
 
     # WS still connected despite breaker sub failure
-    assert coordinator.ws is not None
+    assert coordinator.ws_manager.ws is not None
 
 
 def test_apply_breaker_ws_update_gen1_trip_synthesis(hass, mock_client) -> None:
@@ -1344,7 +1352,7 @@ def test_apply_breaker_ws_update_gen1_trip_synthesis(hass, mock_client) -> None:
     breaker.current_state = "ManualON"
     coordinator.data = LevitonData(breakers={breaker.id: breaker})
 
-    result = coordinator._apply_breaker_ws_update(
+    result = coordinator.ws_manager._apply_breaker_ws_update(
         {"id": breaker.id, "remoteTrip": True}
     )
 
@@ -1360,7 +1368,7 @@ def test_apply_breaker_ws_update_gen2_no_trip_synthesis(hass, mock_client) -> No
     breaker.current_state = "ManualON"
     coordinator.data = LevitonData(breakers={breaker.id: breaker})
 
-    coordinator._apply_breaker_ws_update(
+    coordinator.ws_manager._apply_breaker_ws_update(
         {"id": breaker.id, "remoteTrip": True}
     )
 
@@ -1378,7 +1386,7 @@ async def test_ws_shutdown_bandwidth_errors_graceful(hass, mock_client) -> None:
     )
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
+    coordinator.ws_manager.ws = mock_ws
 
     mock_client.set_panel_bandwidth = AsyncMock(
         side_effect=LevitonConnectionError("fail")
@@ -1392,7 +1400,7 @@ async def test_ws_shutdown_bandwidth_errors_graceful(hass, mock_client) -> None:
 
     # WS still disconnected despite bandwidth errors
     mock_ws.disconnect.assert_called_once()
-    assert coordinator.ws is None
+    assert coordinator.ws_manager.ws is None
 
 
 async def test_ws_watchdog_cleans_up_callbacks(hass, mock_client) -> None:
@@ -1402,16 +1410,16 @@ async def test_ws_watchdog_cleans_up_callbacks(hass, mock_client) -> None:
     coordinator.data = LevitonData()
     mock_ws = MagicMock()
     mock_ws.disconnect = AsyncMock()
-    coordinator.ws = mock_ws
+    coordinator.ws_manager.ws = mock_ws
     mock_remove_disconnect = MagicMock()
-    coordinator._ws_remove_disconnect = mock_remove_disconnect
-    coordinator._last_ws_notification = time.monotonic() - 120
+    coordinator.ws_manager._ws_remove_disconnect = mock_remove_disconnect
+    coordinator.ws_manager._last_ws_notification = time.monotonic() - 120
 
-    await coordinator._async_ws_watchdog(None)
+    await coordinator.ws_manager._async_ws_watchdog(None)
 
     mock_remove_disconnect.assert_called_once()
     mock_ws.disconnect.assert_called_once()
-    assert coordinator.ws is None
+    assert coordinator.ws_manager.ws is None
     coro = entry.async_create_background_task.call_args[0][1]
     coro.close()
 
@@ -1428,7 +1436,7 @@ async def test_reconnect_cancelled(hass, mock_client) -> None:
     ) as mock_sleep:
         mock_sleep.side_effect = asyncio.CancelledError()
         with pytest.raises(asyncio.CancelledError):
-            await coordinator._reconnect_websocket()
+            await coordinator.ws_manager._reconnect()
 
     # _reconnecting is cleaned up in the finally block
-    assert coordinator._reconnecting is False
+    assert coordinator.ws_manager._reconnecting is False

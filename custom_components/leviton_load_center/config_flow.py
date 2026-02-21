@@ -41,6 +41,17 @@ from .const import (
 
 CONF_CODE = "code"
 
+OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_VOLTAGE_208, default=DEFAULT_VOLTAGE_208): bool,
+        vol.Optional(CONF_READ_ONLY, default=DEFAULT_READ_ONLY): bool,
+        vol.Optional(
+            CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT
+        ): bool,
+        vol.Optional(CONF_HIDE_DUMMY, default=DEFAULT_HIDE_DUMMY): bool,
+    }
+)
+
 
 class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Leviton."""
@@ -187,26 +198,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="options",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_VOLTAGE_208,
-                        default=DEFAULT_VOLTAGE_208,
-                    ): bool,
-                    vol.Optional(
-                        CONF_READ_ONLY,
-                        default=DEFAULT_READ_ONLY,
-                    ): bool,
-                    vol.Optional(
-                        CONF_CALCULATED_CURRENT,
-                        default=DEFAULT_CALCULATED_CURRENT,
-                    ): bool,
-                    vol.Optional(
-                        CONF_HIDE_DUMMY,
-                        default=DEFAULT_HIDE_DUMMY,
-                    ): bool,
-                }
-            ),
+            data_schema=OPTIONS_SCHEMA,
         )
 
     async def async_step_reauth(
@@ -353,18 +345,6 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         return self._show_2fa_form("2fa_reconfigure", errors)
-
-
-OPTIONS_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_VOLTAGE_208, default=DEFAULT_VOLTAGE_208): bool,
-        vol.Optional(CONF_READ_ONLY, default=DEFAULT_READ_ONLY): bool,
-        vol.Optional(
-            CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT
-        ): bool,
-        vol.Optional(CONF_HIDE_DUMMY, default=DEFAULT_HIDE_DUMMY): bool,
-    }
-)
 
 
 class LevitonOptionsFlow(OptionsFlow):

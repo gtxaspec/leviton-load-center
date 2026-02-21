@@ -29,14 +29,8 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN, LOGGER
-from .energy import (
-    EnergyTracker,
-    accumulate_breaker_energy,
-    accumulate_ct_energy,
-    calc_daily_energy,
-    snapshot_daily_baselines,
-)
-from .websocket import WebSocketManager, needs_individual_breaker_subs
+from .energy import EnergyTracker
+from .websocket import WebSocketManager
 
 type LevitonConfigEntry = ConfigEntry[LevitonRuntimeData]
 
@@ -66,12 +60,6 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
     config_entry: LevitonConfigEntry
 
-    # Static method re-exports for backward compat (tests call these)
-    _accumulate_breaker_energy = staticmethod(accumulate_breaker_energy)
-    _accumulate_ct_energy = staticmethod(accumulate_ct_energy)
-    calc_daily_energy = staticmethod(calc_daily_energy)
-    _needs_individual_breaker_subs = staticmethod(needs_individual_breaker_subs)
-
     def __init__(
         self,
         hass: HomeAssistant,
@@ -94,98 +82,6 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self.energy = EnergyTracker(hass, entry.entry_id)
         self.ws_manager = WebSocketManager(self)
 
-    # --- Proxy properties for backward compat (tests access these) ---
-
-    @property
-    def ws(self) -> Any:
-        """Proxy to ws_manager.ws."""
-        return self.ws_manager.ws
-
-    @ws.setter
-    def ws(self, value: Any) -> None:
-        self.ws_manager.ws = value
-
-    @property
-    def _last_ws_notification(self) -> float:
-        return self.ws_manager._last_ws_notification
-
-    @_last_ws_notification.setter
-    def _last_ws_notification(self, value: float) -> None:
-        self.ws_manager._last_ws_notification = value
-
-    @property
-    def _reconnecting(self) -> bool:
-        return self.ws_manager._reconnecting
-
-    @_reconnecting.setter
-    def _reconnecting(self, value: bool) -> None:
-        self.ws_manager._reconnecting = value
-
-    @property
-    def _ws_remove_notification(self) -> Any:
-        return self.ws_manager._ws_remove_notification
-
-    @_ws_remove_notification.setter
-    def _ws_remove_notification(self, value: Any) -> None:
-        self.ws_manager._ws_remove_notification = value
-
-    @property
-    def _ws_remove_disconnect(self) -> Any:
-        return self.ws_manager._ws_remove_disconnect
-
-    @_ws_remove_disconnect.setter
-    def _ws_remove_disconnect(self, value: Any) -> None:
-        self.ws_manager._ws_remove_disconnect = value
-
-    @property
-    def _lifetime_store(self) -> Any:
-        return self.energy._lifetime_store
-
-    @_lifetime_store.setter
-    def _lifetime_store(self, value: Any) -> None:
-        self.energy._lifetime_store = value
-
-    # --- Delegation methods (tests call these on coordinator) ---
-
-    async def _connect_websocket(self) -> None:
-        await self.ws_manager.connect()
-
-    @callback
-    def _handle_ws_notification(self, notification: dict[str, Any]) -> None:
-        self.ws_manager._handle_ws_notification(notification)
-
-    @callback
-    def _handle_ws_disconnect(self) -> None:
-        self.ws_manager._handle_ws_disconnect()
-
-    async def _async_ws_watchdog(self, _now: Any = None) -> None:
-        await self.ws_manager._async_ws_watchdog(_now)
-
-    async def _async_ws_refresh(self, _now: Any = None) -> None:
-        await self.ws_manager._async_ws_refresh(_now)
-
-    async def _async_bandwidth_keepalive(self, _now: Any = None) -> None:
-        await self.ws_manager._async_bandwidth_keepalive(_now)
-
-    def _apply_breaker_ws_update(self, breaker_data: dict[str, Any]) -> bool:
-        return self.ws_manager._apply_breaker_ws_update(breaker_data)
-
-    async def _reconnect_websocket(self) -> None:
-        await self.ws_manager._reconnect()
-
-    async def _correct_energy_values(self) -> None:
-        await self.energy.correct_energy_values(self.data)
-
-    async def _load_daily_baselines(self) -> None:
-        await self.energy.load_daily_baselines(self.data)
-
-    async def _save_lifetime_energy(self) -> None:
-        await self.energy.save_lifetime_energy(self.data)
-
-    @callback
-    def _snapshot_daily_baselines(self) -> None:
-        snapshot_daily_baselines(self.data)
-
     def clamp_increasing(self, key: str, value: float) -> float:
         return self.energy.clamp_increasing(key, value)
 
@@ -194,9 +90,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
     async def _async_setup(self) -> None:
         """Discover devices and connect WebSocket on first refresh."""
         await self._discover_devices()
-        await self._correct_energy_values()
-        await self._connect_websocket()
-        await self._load_daily_baselines()
+        await self.energy.correct_energy_values(self.data)
+        await self.ws_manager.connect()
+        await self.energy.load_daily_baselines(self.data)
         self._check_firmware_updates()
         self._midnight_unsub = async_track_time_change(
             self.hass, self._async_handle_midnight, hour=0, minute=0, second=0
@@ -415,7 +311,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         need REST polling (WS delivers power/current but not energy for LDATA).
         When WS is down, all devices are refreshed via REST.
         """
-        ws_connected = self.ws is not None
+        ws_connected = self.ws_manager.ws is not None
 
         if ws_connected and not self.data.panels:
             # WS covers everything, no LDATA panels to poll
@@ -458,8 +354,8 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             raise UpdateFailed(str(err)) from err
 
         # Correct any bandwidth=1 delta values and update the lifetime cache
-        await self._correct_energy_values()
-        await self._save_lifetime_energy()
+        await self.energy.correct_energy_values(self.data)
+        await self.energy.save_lifetime_energy(self.data)
 
         return self.data
 

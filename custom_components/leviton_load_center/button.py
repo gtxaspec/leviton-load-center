@@ -20,7 +20,7 @@ from .const import (
     LOGGER,
     STATE_SOFTWARE_TRIP,
 )
-from .coordinator import LevitonConfigEntry, LevitonCoordinator
+from .coordinator import LevitonConfigEntry
 from .entity import (
     LevitonBreakerControlEntity,
     LevitonEntity,
