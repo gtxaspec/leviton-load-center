@@ -4,7 +4,7 @@ Home Assistant integration for the [Leviton Smart Load Center](https://www.levit
 
 Supports both hub types and accessories:
 - **LWHEM** (Whole Home Energy Module) — with smart breakers and CT clamps
-- **DAU / LDATA** (Data Acquisition Unit) — older generation, smart breakers only
+- **LDATA** (Data Acquisition Unit) — older generation, smart breakers only
 - **LSBMA** (Standalone Bluetooth CT Clamp) — individual circuit monitoring via LWHEM
 
 ## Features
@@ -62,6 +62,7 @@ Supports both hub types and accessories:
 | Daily energy | Sensor | Energy since midnight (kWh), for HA Energy Dashboard |
 | Breaker status | Sensor | currentState (ON, SoftwareTrip, etc.) |
 | Operational status | Sensor | operationalState |
+| Remote status | Sensor | Gen 2 only (RemoteON/RemoteOFF) |
 | Breaker on/off | Switch | Gen 2 only (`canRemoteOn: true`) |
 | Trip | Button | All smart breakers |
 | Identify LED | Switch | Blink the breaker's LED |
@@ -74,7 +75,7 @@ Supports both hub types and accessories:
 |--------|------|-------|
 | Watts | Sensor | Combined power (both legs) |
 | Amps | Sensor | Combined current (both legs) |
-| Diagnostics | Sensors | Per-leg power/current, lifetime energy, lifetime energy import |
+| Diagnostics | Sensors | Per-leg power/current, lifetime energy, lifetime energy import, usage type |
 
 ### LWHEM Hub
 
@@ -86,9 +87,9 @@ Supports both hub types and accessories:
 | Amps / Amps leg 1 / Amps leg 2 | Sensor | Aggregated from main CT |
 | Daily energy | Sensor | Panel-level daily energy |
 | Identify | Button | Blink the LWHEM LED |
-| Diagnostics | Sensors | Firmware, IP, MAC, WiFi RSSI, serial, lifetime energy |
+| Diagnostics | Sensors | Firmware (main, BLE), firmware update status, IP, MAC, WiFi RSSI, serial, residence ID, lifetime energy |
 
-### DAU / LDATA Panel
+### LDATA Panel
 
 | Entity | Type | Notes |
 |--------|------|-------|
@@ -98,21 +99,21 @@ Supports both hub types and accessories:
 | Amps / Amps leg 1 / Amps leg 2 | Sensor | Aggregated from breakers |
 | Daily energy | Sensor | Panel-level daily energy |
 | Connectivity | Binary sensor | Online/offline status |
-| Diagnostics | Sensors | Firmware (main, BCM, BSM, BSM radio, NCM), WiFi RSSI/SSID/mode, lifetime energy |
+| Diagnostics | Sensors | Firmware (main, BCM, BSM, BSM radio, NCM), firmware update status, WiFi RSSI/SSID/mode, serial, residence ID, lifetime energy |
 
 ## Architecture
 
 ### Data Flow
 
 ```
-Leviton Cloud API (my.leviton.com)
+Leviton Cloud API
         |
         +-- REST API: initial discovery, fallback polling (10-min interval)
         |
-        +-- WebSocket (wss://socket.cloud.leviton.com)
+        +-- WebSocket
                 |
                 +-- IotWhem subscription (hub status + CT data, all FW)
-                +-- ResidentialBreakerPanel subscription (DAU hub + breaker data)
+                +-- ResidentialBreakerPanel subscription (LDATA hub + breaker data)
                 +-- Individual ResidentialBreaker subscriptions (FW 2.0.0+ only)
 ```
 
@@ -124,7 +125,7 @@ The Leviton cloud server enforces a **hard 60-minute WebSocket timeout** that te
 |-----------|----------|---------|
 | Proactive reconnect | Every 55 min | Cycle the WS connection before the 60-min server cutoff |
 | Silence watchdog | Every 30 sec | If no WS data for 90 seconds, force immediate reconnect |
-| Bandwidth keepalive | Every 60 sec | `PUT bandwidth=1` to WHEMs to keep CTs pushing at high frequency |
+| Bandwidth keepalive | Every 60 sec | Toggle bandwidth `1→0→1` on WHEMs to keep CTs pushing at high frequency |
 
 On each reconnect, setting `bandwidth=1` triggers a full state flood from the server, providing automatic catch-up of any data missed during the brief reconnect gap.
 
@@ -161,18 +162,24 @@ The integration detects WHEM firmware version and subscribes accordingly:
 | FW 1.x | Subscribe to IotWhem only (delivers all child breaker + CT data) |
 | FW 2.0.0+ | Subscribe to IotWhem (CT data) + individual ResidentialBreaker models |
 
-DAU panels deliver all child breaker data via the hub subscription on all firmware versions.
+LDATA panels deliver all child breaker data via the hub subscription on all firmware versions.
 
 ## Requirements
 
-- A Leviton Smart Load Center (LWHEM and/or DAU/LDATA)
+- A Leviton Smart Load Center (LWHEM and/or LDATA)
 - A My Leviton account (my.leviton.com)
 - Home Assistant 2024.1 or later
 - Internet connection (cloud API, no local control)
 
 ## API Usage
 
-This integration is designed to be a respectful consumer of the Leviton cloud API. It relies on WebSocket push notifications as its primary data source, only falling back to REST polling when the WebSocket connection is unavailable. Compared to the official Leviton mobile app, this integration generates approximately **8x fewer API calls** while delivering the same real-time data. We aim to minimize server load and avoid any unnecessary strain on Leviton's infrastructure.
+This integration is designed to be a respectful consumer of the Leviton cloud API. It relies on WebSocket push notifications as its primary data source, only falling back to REST polling when the WebSocket connection is unavailable. Compared to the official Leviton mobile app, this integration generates approximately **3x fewer API calls** (~4,500/day vs ~12,000/day for a single WHEM) while delivering the same real-time data. We aim to minimize server load and avoid any unnecessary strain on Leviton's infrastructure.
+
+## Planned Features
+
+- Over-voltage / under-voltage binary sensors (API fields available on WHEMs and breakers)
+- Energy import sensors for breakers (tracked internally, useful for solar installations)
+- Energy history via cloud endpoints (`getAllEnergyConsumptionFor*` — alternative to lifetime delta calculation)
 
 ## Library
 

@@ -7,8 +7,8 @@ rules:
     comment: Integration does not register custom service actions.
   appropriate-polling: done
   brands:
-    status: todo
-    comment: Logo and icon needed for home-assistant/brands repo.
+    status: done
+    comment: PR home-assistant/brands#9761 submitted with icon, logo, and dark variants.
   common-modules: done
   config-flow: done
   config-flow-test-coverage: done
@@ -18,8 +18,8 @@ rules:
     comment: Integration does not register custom service actions.
   docs-high-level-description: done
   docs-installation-instructions:
-    status: todo
-    comment: Needs user-facing documentation on home-assistant.io.
+    status: done
+    comment: README covers HACS and manual installation.
   docs-removal-instructions:
     status: todo
     comment: Needs user-facing documentation on home-assistant.io.
@@ -43,7 +43,9 @@ rules:
   log-when-unavailable: done
   parallel-updates: done
   reauthentication-flow: done
-  test-coverage: done
+  test-coverage:
+    status: done
+    comment: 264 tests, 97% overall coverage. All platform modules ≥94%.
 
   # Gold
   devices: done
@@ -55,20 +57,20 @@ rules:
     status: exempt
     comment: Cloud-only API, no network discovery.
   docs-data-update:
-    status: todo
-    comment: Needs user-facing documentation on home-assistant.io.
+    status: done
+    comment: README Architecture section documents REST polling, WebSocket push, and reconnect strategy.
   docs-examples:
     status: todo
     comment: Needs user-facing documentation on home-assistant.io.
   docs-known-limitations:
-    status: todo
-    comment: Needs user-facing documentation on home-assistant.io.
+    status: done
+    comment: README documents cloud-only API requirement and no local control.
   docs-supported-devices:
-    status: todo
-    comment: Needs user-facing documentation on home-assistant.io.
+    status: done
+    comment: README lists LWHEM, DAU/LDATA, and LSBMA with per-device entity tables.
   docs-supported-functions:
-    status: todo
-    comment: Needs user-facing documentation on home-assistant.io.
+    status: done
+    comment: README has entity tables covering all sensors, switches, buttons, and binary sensors per device.
   docs-troubleshooting:
     status: todo
     comment: Needs user-facing documentation on home-assistant.io.
@@ -78,7 +80,9 @@ rules:
   dynamic-devices: done
   entity-category: done
   entity-device-class: done
-  entity-disabled-by-default: done
+  entity-disabled-by-default:
+    status: todo
+    comment: No entities use entity_registry_enabled_default=False. Diagnostic sensors (firmware, serial, RSSI, position) should be disabled by default.
   entity-translations: done
   exception-translations: done
   icon-translations: done
