@@ -14,6 +14,7 @@ from aioleviton import LevitonAuthError, LevitonConnectionError
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from homeassistant.components.leviton_load_center.const import STATE_SOFTWARE_TRIP
 from homeassistant.components.leviton_load_center.coordinator import (
     LevitonCoordinator,
     LevitonData,
@@ -1124,6 +1125,8 @@ async def test_ws_refresh_noop_when_disconnected(hass, mock_client) -> None:
 
 async def test_bandwidth_keepalive_toggles(hass, mock_client) -> None:
     """Test bandwidth keepalive toggles 1->0->1 for each WHEM."""
+    from unittest.mock import call
+
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     whem = deepcopy(MOCK_WHEM)
@@ -1132,12 +1135,11 @@ async def test_bandwidth_keepalive_toggles(hass, mock_client) -> None:
 
     await coordinator._async_bandwidth_keepalive(None)
 
-    calls = mock_client.set_whem_bandwidth.call_args_list
-    assert len(calls) == 3
-    assert calls[0].kwargs == {"bandwidth": 1} or calls[0].args == (whem.id,)
-    # Verify the sequence: 1, 0, 1
-    bw_values = [c.kwargs.get("bandwidth", c.args[1] if len(c.args) > 1 else None) for c in calls]
-    assert bw_values == [1, 0, 1]
+    assert mock_client.set_whem_bandwidth.call_args_list == [
+        call(whem.id, bandwidth=1),
+        call(whem.id, bandwidth=0),
+        call(whem.id, bandwidth=1),
+    ]
 
 
 async def test_bandwidth_keepalive_noop_when_disconnected(hass, mock_client) -> None:
@@ -1246,3 +1248,187 @@ async def test_reconnect_all_attempts_fail(hass, mock_client) -> None:
 
     assert coordinator._reconnecting is False
     assert coordinator.ws is None
+
+
+async def test_ws_connect_whem_sub_failure(hass, mock_client, mock_websocket) -> None:
+    """Test connect() handles WHEM bandwidth/subscription failure gracefully."""
+    mock_client.set_whem_bandwidth = AsyncMock(
+        side_effect=LevitonConnectionError("bandwidth fail")
+    )
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
+
+    await coordinator._connect_websocket()
+
+    # WS connected despite WHEM subscription failure
+    assert coordinator.ws is not None
+
+
+async def test_ws_connect_panel_sub_failure(hass, mock_client, mock_websocket) -> None:
+    """Test connect() handles panel bandwidth/subscription failure gracefully."""
+    mock_client.set_panel_bandwidth = AsyncMock(
+        side_effect=LevitonConnectionError("bandwidth fail")
+    )
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(panels={MOCK_PANEL.id: deepcopy(MOCK_PANEL)})
+
+    await coordinator._connect_websocket()
+
+    assert coordinator.ws is not None
+
+
+async def test_ws_connect_fw2_individual_breaker_subs(
+    hass, mock_client, mock_websocket
+) -> None:
+    """Test connect() subscribes to individual breakers on FW 2.x."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "2.0.13"
+    breaker = deepcopy(MOCK_BREAKER_GEN1)  # iot_whem_id matches MOCK_WHEM
+    breaker_other = deepcopy(MOCK_BREAKER_GEN2)
+    breaker_other.iot_whem_id = "other_whem"  # doesn't match → skipped
+    coordinator.data = LevitonData(
+        whems={whem.id: whem},
+        breakers={breaker.id: breaker, breaker_other.id: breaker_other},
+    )
+
+    await coordinator._connect_websocket()
+
+    subscribe_calls = [call.args for call in mock_websocket.subscribe.call_args_list]
+    assert ("IotWhem", whem.id) in subscribe_calls
+    assert ("ResidentialBreaker", breaker.id) in subscribe_calls
+    # Other breaker NOT subscribed (different WHEM)
+    assert ("ResidentialBreaker", breaker_other.id) not in subscribe_calls
+
+
+async def test_ws_connect_breaker_sub_failure(
+    hass, mock_client, mock_websocket
+) -> None:
+    """Test connect() handles individual breaker subscription failure gracefully."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    whem = deepcopy(MOCK_WHEM)
+    whem.version = "2.0.13"
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    coordinator.data = LevitonData(
+        whems={whem.id: whem},
+        breakers={breaker.id: breaker},
+    )
+
+    # Individual breaker subscribe fails
+    call_count = 0
+    original_subscribe = mock_websocket.subscribe
+
+    async def selective_fail(model, model_id):
+        nonlocal call_count
+        call_count += 1
+        if model == "ResidentialBreaker":
+            raise LevitonConnectionError("breaker sub fail")
+
+    mock_websocket.subscribe = AsyncMock(side_effect=selective_fail)
+
+    await coordinator._connect_websocket()
+
+    # WS still connected despite breaker sub failure
+    assert coordinator.ws is not None
+
+
+def test_apply_breaker_ws_update_gen1_trip_synthesis(hass, mock_client) -> None:
+    """Test Gen 1 remoteTrip synthesizes currentState=SoftwareTrip."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)  # can_remote_on=False
+    breaker.current_state = "ManualON"
+    coordinator.data = LevitonData(breakers={breaker.id: breaker})
+
+    result = coordinator._apply_breaker_ws_update(
+        {"id": breaker.id, "remoteTrip": True}
+    )
+
+    assert result is True
+    assert breaker.current_state == STATE_SOFTWARE_TRIP
+
+
+def test_apply_breaker_ws_update_gen2_no_trip_synthesis(hass, mock_client) -> None:
+    """Test Gen 2 remoteTrip does NOT synthesize (can_remote_on=True)."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    breaker = deepcopy(MOCK_BREAKER_GEN2)  # can_remote_on=True
+    breaker.current_state = "ManualON"
+    coordinator.data = LevitonData(breakers={breaker.id: breaker})
+
+    coordinator._apply_breaker_ws_update(
+        {"id": breaker.id, "remoteTrip": True}
+    )
+
+    # Gen 2 breaker does not get synthesized SoftwareTrip
+    assert breaker.current_state == "ManualON"
+
+
+async def test_ws_shutdown_bandwidth_errors_graceful(hass, mock_client) -> None:
+    """Test shutdown handles bandwidth disable errors gracefully."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
+        panels={MOCK_PANEL.id: deepcopy(MOCK_PANEL)},
+    )
+    mock_ws = MagicMock()
+    mock_ws.disconnect = AsyncMock()
+    coordinator.ws = mock_ws
+
+    mock_client.set_panel_bandwidth = AsyncMock(
+        side_effect=LevitonConnectionError("fail")
+    )
+    mock_client.set_whem_bandwidth = AsyncMock(
+        side_effect=LevitonConnectionError("fail")
+    )
+
+    # Should not raise
+    await coordinator.async_shutdown()
+
+    # WS still disconnected despite bandwidth errors
+    mock_ws.disconnect.assert_called_once()
+    assert coordinator.ws is None
+
+
+async def test_ws_watchdog_cleans_up_callbacks(hass, mock_client) -> None:
+    """Test watchdog removes disconnect callback before forcing reconnect."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData()
+    mock_ws = MagicMock()
+    mock_ws.disconnect = AsyncMock()
+    coordinator.ws = mock_ws
+    mock_remove_disconnect = MagicMock()
+    coordinator._ws_remove_disconnect = mock_remove_disconnect
+    coordinator._last_ws_notification = time.monotonic() - 120
+
+    await coordinator._async_ws_watchdog(None)
+
+    mock_remove_disconnect.assert_called_once()
+    mock_ws.disconnect.assert_called_once()
+    assert coordinator.ws is None
+    coro = entry.async_create_background_task.call_args[0][1]
+    coro.close()
+
+
+async def test_reconnect_cancelled(hass, mock_client) -> None:
+    """Test reconnect handles CancelledError and re-raises it."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData()
+
+    with patch(
+        "homeassistant.components.leviton_load_center.websocket.asyncio.sleep",
+        new_callable=AsyncMock,
+    ) as mock_sleep:
+        mock_sleep.side_effect = asyncio.CancelledError()
+        with pytest.raises(asyncio.CancelledError):
+            await coordinator._reconnect_websocket()
+
+    # _reconnecting is cleaned up in the finally block
+    assert coordinator._reconnecting is False

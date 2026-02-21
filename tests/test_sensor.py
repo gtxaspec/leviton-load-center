@@ -10,9 +10,8 @@ import pytest
 from aioleviton import Breaker, Ct, Whem
 
 from homeassistant.components.leviton_load_center.coordinator import LevitonData
-from homeassistant.components.leviton_load_center.entity import (
-    should_include_breaker,
-)
+from homeassistant.components.leviton_load_center.entity import should_include_breaker
+from homeassistant.components.leviton_load_center.sensor import async_setup_entry
 from homeassistant.components.leviton_load_center.sensor_descriptions import (
     BREAKER_SENSORS,
     CT_SENSORS,
@@ -38,7 +37,6 @@ from homeassistant.components.leviton_load_center.sensor_descriptions import (
 )
 
 from homeassistant.components.leviton_load_center.coordinator import LevitonRuntimeData
-from homeassistant.components.leviton_load_center.sensor import async_setup_entry
 
 from .conftest import (
     MOCK_BREAKER_GEN1,
@@ -555,8 +553,9 @@ def test_panel_daily_energy_no_baselines() -> None:
 # --- Panel leg power tests ---
 
 
-def test_panel_leg_power_leg1() -> None:
-    """Test panel leg power sums power for leg 1 breakers."""
+@pytest.mark.parametrize("leg,expected", [(1, 100), (2, 200)])
+def test_panel_leg_power(leg, expected) -> None:
+    """Test panel leg power sums only the breakers on that leg."""
     panel = deepcopy(MOCK_PANEL)
     b1 = deepcopy(MOCK_BREAKER_GEN1)
     b1.residential_breaker_panel_id = panel.id
@@ -567,24 +566,7 @@ def test_panel_leg_power_leg1() -> None:
     b2.position = 3  # leg 2
     b2.power = 200
     data = LevitonData(breakers={b1.id: b1, b2.id: b2})
-    result = _panel_leg_power(panel, data, 1)
-    assert result == 100
-
-
-def test_panel_leg_power_leg2() -> None:
-    """Test panel leg power sums power for leg 2 breakers."""
-    panel = deepcopy(MOCK_PANEL)
-    b1 = deepcopy(MOCK_BREAKER_GEN1)
-    b1.residential_breaker_panel_id = panel.id
-    b1.position = 1  # leg 1
-    b1.power = 100
-    b2 = deepcopy(MOCK_BREAKER_GEN2)
-    b2.residential_breaker_panel_id = panel.id
-    b2.position = 3  # leg 2
-    b2.power = 200
-    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
-    result = _panel_leg_power(panel, data, 2)
-    assert result == 200
+    assert _panel_leg_power(panel, data, leg) == expected
 
 
 def test_panel_leg_power_no_breakers() -> None:
@@ -598,8 +580,9 @@ def test_panel_leg_power_no_breakers() -> None:
 # --- Panel leg current tests ---
 
 
-def test_panel_leg_current_leg1() -> None:
-    """Test panel leg current sums current for leg 1 breakers."""
+@pytest.mark.parametrize("leg,expected", [(1, 5), (2, 10)])
+def test_panel_leg_current(leg, expected) -> None:
+    """Test panel leg current sums only the breakers on that leg."""
     panel = deepcopy(MOCK_PANEL)
     b1 = deepcopy(MOCK_BREAKER_GEN1)
     b1.residential_breaker_panel_id = panel.id
@@ -610,51 +593,22 @@ def test_panel_leg_current_leg1() -> None:
     b2.position = 3  # leg 2
     b2.rms_current = 10
     data = LevitonData(breakers={b1.id: b1, b2.id: b2})
-    result = _panel_leg_current(panel, data, 1)
-    assert result == 5
-
-
-def test_panel_leg_current_leg2() -> None:
-    """Test panel leg current sums current for leg 2 breakers."""
-    panel = deepcopy(MOCK_PANEL)
-    b1 = deepcopy(MOCK_BREAKER_GEN1)
-    b1.residential_breaker_panel_id = panel.id
-    b1.position = 1  # leg 1
-    b1.rms_current = 5
-    b2 = deepcopy(MOCK_BREAKER_GEN2)
-    b2.residential_breaker_panel_id = panel.id
-    b2.position = 3  # leg 2
-    b2.rms_current = 10
-    data = LevitonData(breakers={b1.id: b1, b2.id: b2})
-    result = _panel_leg_current(panel, data, 2)
-    assert result == 10
+    assert _panel_leg_current(panel, data, leg) == expected
 
 
 # --- Panel frequency tests ---
 
 
-def test_panel_frequency_leg1() -> None:
-    """Test panel frequency returns line_frequency from first odd-position breaker."""
+@pytest.mark.parametrize("position,leg,freq", [(1, 1, 60.0), (3, 2, 60.1)])
+def test_panel_frequency(position, leg, freq) -> None:
+    """Test panel frequency returns line_frequency from the correct leg."""
     panel = deepcopy(MOCK_PANEL)
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.residential_breaker_panel_id = panel.id
-    breaker.position = 1
-    breaker.line_frequency = 60.0
+    breaker.position = position
+    breaker.line_frequency = freq
     data = LevitonData(breakers={breaker.id: breaker})
-    result = _panel_frequency(panel, data, 1)
-    assert result == 60.0
-
-
-def test_panel_frequency_leg2() -> None:
-    """Test panel frequency returns line_frequency from first leg 2 breaker."""
-    panel = deepcopy(MOCK_PANEL)
-    breaker = deepcopy(MOCK_BREAKER_GEN2)
-    breaker.residential_breaker_panel_id = panel.id
-    breaker.position = 3
-    breaker.line_frequency = 60.1
-    data = LevitonData(breakers={breaker.id: breaker})
-    result = _panel_frequency(panel, data, 2)
-    assert result == 60.1
+    assert _panel_frequency(panel, data, leg) == freq
 
 
 def test_panel_frequency_no_breakers() -> None:
@@ -716,8 +670,11 @@ async def test_sensor_setup_entry_creates_entities() -> None:
     whem_sensors = [e for e in added_entities if isinstance(e, LevitonWhemSensor)]
     panel_sensors = [e for e in added_entities if isinstance(e, LevitonPanelSensor)]
 
-    # Both breakers are smart, so they get sensors (filtered by exists_fn)
-    assert len(breaker_sensors) > 0
+    # Both breakers are smart, exact count from exists_fn
+    expected_breaker = sum(1 for d in BREAKER_SENSORS if d.exists_fn(gen1)) + sum(
+        1 for d in BREAKER_SENSORS if d.exists_fn(gen2)
+    )
+    assert len(breaker_sensors) == expected_breaker
     # 1 CT × 10 descriptions
     assert len(ct_sensors) == len(CT_SENSORS)
     # 1 WHEM × 22 descriptions

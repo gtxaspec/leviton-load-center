@@ -116,7 +116,7 @@ class LevitonBreakerSwitch(LevitonBreakerControlEntity, SwitchEntity):
                 translation_domain=DOMAIN,
                 translation_key="breaker_control_failed",
                 translation_placeholders={
-                    "name": self.name or self._device_id,
+                    "name": self._device_id,
                     "error": str(err),
                 },
             ) from err
@@ -135,7 +135,7 @@ class LevitonBreakerSwitch(LevitonBreakerControlEntity, SwitchEntity):
                 translation_domain=DOMAIN,
                 translation_key="breaker_control_failed",
                 translation_placeholders={
-                    "name": self.name or self._device_id,
+                    "name": self._device_id,
                     "error": str(err),
                 },
             ) from err
@@ -166,7 +166,7 @@ class LevitonBreakerIdentifySwitch(LevitonBreakerControlEntity, SwitchEntity):
                 translation_domain=DOMAIN,
                 translation_key="identify_failed",
                 translation_placeholders={
-                    "name": self.name or self._device_id,
+                    "name": self._device_id,
                     "error": str(err),
                 },
             ) from err
@@ -185,7 +185,7 @@ class LevitonBreakerIdentifySwitch(LevitonBreakerControlEntity, SwitchEntity):
                 translation_domain=DOMAIN,
                 translation_key="identify_failed",
                 translation_placeholders={
-                    "name": self.name or self._device_id,
+                    "name": self._device_id,
                     "error": str(err),
                 },
             ) from err

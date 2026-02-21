@@ -153,6 +153,8 @@ async def test_turn_on(mock_client) -> None:
     await switch.async_turn_on()
 
     mock_client.turn_on_breaker.assert_called_once_with(breaker.id)
+    assert breaker.remote_state == "RemoteON"
+    switch.coordinator.async_set_updated_data.assert_called_once()
 
 
 async def test_turn_off(mock_client) -> None:
@@ -167,6 +169,8 @@ async def test_turn_off(mock_client) -> None:
     await switch.async_turn_off()
 
     mock_client.turn_off_breaker.assert_called_once_with(breaker.id)
+    assert breaker.remote_state == "RemoteOFF"
+    switch.coordinator.async_set_updated_data.assert_called_once()
 
 
 # --- Platform setup tests ---
@@ -224,6 +228,7 @@ async def test_identify_turn_on(mock_client) -> None:
 
     mock_client.blink_led.assert_called_once_with(breaker.id)
     assert breaker.blink_led is True
+    switch.coordinator.async_set_updated_data.assert_called_once()
 
 
 async def test_identify_turn_off(mock_client) -> None:
@@ -240,6 +245,7 @@ async def test_identify_turn_off(mock_client) -> None:
 
     mock_client.stop_blink_led.assert_called_once_with(breaker.id)
     assert breaker.blink_led is False
+    switch.coordinator.async_set_updated_data.assert_called_once()
 
 
 # --- Platform setup tests ---
@@ -304,7 +310,7 @@ async def test_turn_on_error_raises_ha_error(mock_client) -> None:
         side_effect=LevitonConnectionError("Connection lost")
     )
     switch = _make_switch(breaker, data, mock_client)
-    switch._attr_name = "Test Breaker"
+
 
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_on()
@@ -321,7 +327,7 @@ async def test_turn_off_error_raises_ha_error(mock_client) -> None:
         side_effect=LevitonConnectionError("Connection lost")
     )
     switch = _make_switch(breaker, data, mock_client)
-    switch._attr_name = "Test Breaker"
+
 
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_off()
@@ -338,7 +344,7 @@ async def test_identify_on_error_raises_ha_error(mock_client) -> None:
         side_effect=LevitonConnectionError("Connection lost")
     )
     switch = _make_identify_switch(breaker, data, mock_client)
-    switch._attr_name = "Test Breaker"
+
 
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_on()
@@ -355,7 +361,7 @@ async def test_identify_off_error_raises_ha_error(mock_client) -> None:
         side_effect=LevitonConnectionError("Connection lost")
     )
     switch = _make_identify_switch(breaker, data, mock_client)
-    switch._attr_name = "Test Breaker"
+
 
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_off()

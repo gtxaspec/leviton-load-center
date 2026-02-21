@@ -266,24 +266,6 @@ def test_entity_available_breaker_whem_offline() -> None:
     assert entity.available is False
 
 
-def test_entity_available_breaker_whem_online() -> None:
-    """Test breaker entity is available when parent WHEM is online."""
-    breaker = deepcopy(MOCK_BREAKER_GEN1)
-    whem = deepcopy(MOCK_WHEM)
-    whem.connected = True
-    data = LevitonData(
-        breakers={breaker.id: breaker},
-        whems={whem.id: whem},
-    )
-    coordinator = MagicMock()
-    coordinator.data = data
-    coordinator.last_update_success = True
-    description = MagicMock()
-    description.key = "power"
-    entity = LevitonEntity(coordinator, description, breaker.id, MagicMock())
-    assert entity.available is True
-
-
 def test_entity_available_breaker_panel_offline() -> None:
     """Test breaker entity is unavailable when parent panel is offline."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)

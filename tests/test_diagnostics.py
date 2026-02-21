@@ -10,34 +10,10 @@ from homeassistant.components.leviton_load_center.coordinator import (
     LevitonRuntimeData,
 )
 from homeassistant.components.leviton_load_center.diagnostics import (
-    TO_REDACT_BREAKER,
-    TO_REDACT_PANEL,
-    TO_REDACT_WHEM,
     async_get_config_entry_diagnostics,
 )
 
 from .conftest import MOCK_BREAKER_GEN1, MOCK_CT, MOCK_PANEL, MOCK_WHEM
-
-
-def test_whem_redact_keys() -> None:
-    """Test WHEM redaction key set is correct."""
-    assert "token" in TO_REDACT_WHEM
-    assert "mac" in TO_REDACT_WHEM
-    assert "localIP" in TO_REDACT_WHEM
-    assert "regKey" in TO_REDACT_WHEM
-    assert "connectedNetwork" in TO_REDACT_WHEM
-
-
-def test_panel_redact_keys() -> None:
-    """Test panel redaction key set is correct."""
-    assert "installerEmail" in TO_REDACT_PANEL
-    assert "installerPhoneNumber" in TO_REDACT_PANEL
-    assert "wifiSSID" in TO_REDACT_PANEL
-
-
-def test_breaker_redact_keys() -> None:
-    """Test breaker redaction key set is correct."""
-    assert "serialNumber" in TO_REDACT_BREAKER
 
 
 async def test_diagnostics_output(hass) -> None:

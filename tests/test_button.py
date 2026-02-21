@@ -52,6 +52,8 @@ async def test_trip_button_press(mock_client) -> None:
     await button.async_press()
 
     mock_client.trip_breaker.assert_called_once_with(breaker.id)
+    assert breaker.current_state == "SoftwareTrip"
+    button.coordinator.async_set_updated_data.assert_called_once()
 
 
 async def test_whem_identify_button_press(mock_client) -> None:
@@ -175,7 +177,7 @@ async def test_trip_button_error_raises_ha_error(mock_client) -> None:
     button = LevitonTripButton(
         coordinator, TRIP_BUTTON_DESCRIPTION, breaker.id, dev_info
     )
-    button._attr_name = "Test Breaker"
+
 
     with pytest.raises(HomeAssistantError):
         await button.async_press()
@@ -193,7 +195,26 @@ async def test_whem_identify_error_raises_ha_error(mock_client) -> None:
     button = LevitonWhemIdentifyButton(
         coordinator, IDENTIFY_BUTTON_DESCRIPTION, whem.id, dev_info
     )
-    button._attr_name = "Test WHEM"
+
 
     with pytest.raises(HomeAssistantError):
         await button.async_press()
+
+
+# --- WHEM identify button availability tests ---
+
+
+def test_whem_identify_available_offline() -> None:
+    """Test WHEM identify button is unavailable when WHEM is disconnected."""
+    whem = deepcopy(MOCK_WHEM)
+    whem.connected = False
+    data = LevitonData(whems={whem.id: whem})
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    dev_info = whem_device_info(whem.id, data)
+    button = LevitonWhemIdentifyButton(
+        coordinator, IDENTIFY_BUTTON_DESCRIPTION, whem.id, dev_info
+    )
+    button._collection = "whems"
+    assert button.available is False
