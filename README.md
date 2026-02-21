@@ -187,6 +187,12 @@ This integration is designed to be a respectful consumer of the Leviton cloud AP
 
 This integration uses [aioleviton](https://github.com/gtxaspec/aioleviton), an async Python library for the Leviton cloud API.
 
+## Acknowledgments
+
+Thanks to [Leviton](https://www.leviton.com/) for creating the Smart Load Center product line, the LWHEM, LDATA, and smart breaker ecosystem that makes whole-home energy monitoring and control possible.
+
+This project was inspired by [ldata-ha](https://github.com/rwoldberg/ldata-ha) by [@rwoldberg](https://github.com/rwoldberg), an earlier Home Assistant integration for Leviton LDATA panels.
+
 ## Disclaimer
 
 This is a do-it-yourself project for Leviton Load Center product users and is not affiliated with, endorsed by, or sponsored by Leviton Manufacturing Co., Inc. "Leviton" and all related product names are trademarks of Leviton Manufacturing Co., Inc. This integration interacts with Leviton's cloud services using your own account credentials. Use at your own risk.
