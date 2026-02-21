@@ -170,7 +170,7 @@ LDATA panels deliver all child breaker data via the hub subscription on all firm
 
 - A Leviton Smart Load Center (LWHEM and/or LDATA)
 - A My Leviton account (my.leviton.com)
-- Home Assistant 2024.1 or later
+- Home Assistant 2024.4 or later
 - Internet connection (cloud API, no local control)
 
 ## API Usage
