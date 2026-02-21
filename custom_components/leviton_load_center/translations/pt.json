@@ -1,0 +1,280 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurar Leviton Load Center",
+        "description": "Insira as credenciais do aplicativo My Leviton para conectar ao seu Leviton Load Center. Estas s\u00e3o as mesmas credenciais que voc\u00ea usa para entrar em my.leviton.com.",
+        "data": {
+          "email": "E-mail",
+          "password": "Senha"
+        }
+      },
+      "2fa": {
+        "title": "Autentica\u00e7\u00e3o de dois fatores",
+        "description": "Um c\u00f3digo de verifica\u00e7\u00e3o foi enviado para {email}. Insira o c\u00f3digo abaixo.",
+        "data": {
+          "code": "C\u00f3digo de verifica\u00e7\u00e3o"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reautenticar com Leviton",
+        "description": "Sua sess\u00e3o para {email} expirou. Insira sua senha para reconectar.",
+        "data": {
+          "password": "Senha"
+        }
+      },
+      "2fa_reauth": {
+        "title": "Autentica\u00e7\u00e3o de dois fatores",
+        "description": "Um c\u00f3digo de verifica\u00e7\u00e3o foi enviado para {email}. Insira o c\u00f3digo abaixo.",
+        "data": {
+          "code": "C\u00f3digo de verifica\u00e7\u00e3o"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurar Leviton",
+        "description": "Atualize as credenciais da sua conta My Leviton.",
+        "data": {
+          "email": "E-mail",
+          "password": "Senha"
+        }
+      },
+      "2fa_reconfigure": {
+        "title": "Autentica\u00e7\u00e3o de dois fatores",
+        "description": "Um c\u00f3digo de verifica\u00e7\u00e3o foi enviado para {email}. Insira o c\u00f3digo abaixo.",
+        "data": {
+          "code": "C\u00f3digo de verifica\u00e7\u00e3o"
+        }
+      },
+      "options": {
+        "title": "Op\u00e7\u00f5es da integra\u00e7\u00e3o",
+        "description": "Configure o comportamento da integra\u00e7\u00e3o. Estas configura\u00e7\u00f5es podem ser alteradas posteriormente nas op\u00e7\u00f5es da integra\u00e7\u00e3o.",
+        "data": {
+          "voltage_208": "Sistema el\u00e9trico 208V",
+          "read_only": "Modo somente leitura (desativar controles)",
+          "calculated_current": "Calcular corrente a partir da pot\u00eancia",
+          "hide_dummy": "Ocultar disjuntores n\u00e3o inteligentes"
+        },
+        "data_description": {
+          "voltage_208": "Ative para sistemas comerciais bif\u00e1sicos de 208V. Ajusta os c\u00e1lculos de tens\u00e3o bipolar de 240V para 208V.",
+          "read_only": "Quando ativado, os controles de trip, liga/desliga e LED n\u00e3o s\u00e3o criados. Apenas sensores e diagn\u00f3sticos s\u00e3o exibidos.",
+          "calculated_current": "Derivar amperagem a partir de pot\u00eancia/tens\u00e3o em vez do campo rmsCurrent da API para maior precis\u00e3o.",
+          "hide_dummy": "Ocultar disjuntores b\u00e1sicos que n\u00e3o possuem sensor CT LSBMA conectado."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Falha ao conectar ao servi\u00e7o Leviton na nuvem",
+      "invalid_auth": "E-mail ou senha inv\u00e1lidos",
+      "invalid_code": "C\u00f3digo de verifica\u00e7\u00e3o inv\u00e1lido",
+      "unknown": "Ocorreu um erro inesperado"
+    },
+    "abort": {
+      "already_configured": "Esta conta Leviton j\u00e1 est\u00e1 configurada",
+      "reauth_successful": "Reautentica\u00e7\u00e3o bem-sucedida",
+      "reconfigure_successful": "Reconfigura\u00e7\u00e3o bem-sucedida",
+      "unique_id_mismatch": "A conta n\u00e3o corresponde \u00e0 configura\u00e7\u00e3o existente"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Op\u00e7\u00f5es do Leviton Load Center",
+        "data": {
+          "voltage_208": "Sistema el\u00e9trico 208V",
+          "read_only": "Modo somente leitura (desativar controles)",
+          "calculated_current": "Calcular corrente a partir da pot\u00eancia",
+          "hide_dummy": "Ocultar disjuntores n\u00e3o inteligentes"
+        },
+        "data_description": {
+          "voltage_208": "Ative para sistemas comerciais bif\u00e1sicos de 208V. Ajusta os c\u00e1lculos de tens\u00e3o bipolar de 240V para 208V.",
+          "read_only": "Quando ativado, os controles de trip, liga/desliga e LED n\u00e3o s\u00e3o criados. Apenas sensores e diagn\u00f3sticos s\u00e3o exibidos.",
+          "calculated_current": "Derivar amperagem a partir de pot\u00eancia/tens\u00e3o em vez do campo rmsCurrent da API para maior precis\u00e3o.",
+          "hide_dummy": "Ocultar disjuntores b\u00e1sicos que n\u00e3o possuem sensor CT LSBMA conectado."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power": {
+        "name": "Watts"
+      },
+      "current": {
+        "name": "Amperes"
+      },
+      "energy": {
+        "name": "Energia di\u00e1ria"
+      },
+      "breaker_status": {
+        "name": "Estado do disjuntor",
+        "state": {
+          "on": "Ligado",
+          "off": "Desligado",
+          "connecting": "Conectando",
+          "offline": "Offline",
+          "software_trip": "Desarme por software",
+          "gfci_fault": "Falha GFCI",
+          "afci_miswire": "Fia\u00e7\u00e3o incorreta AFCI",
+          "afci_fault": "Falha AFCI",
+          "overcurrent_trip": "Desarme por sobrecorrente",
+          "overload_trip": "Desarme por sobrecarga",
+          "short_circuit_trip": "Desarme por curto-circuito",
+          "upstream_fault": "Falha a montante"
+        }
+      },
+      "remote_status": {
+        "name": "Estado remoto",
+        "state": {
+          "on": "Ligado",
+          "off": "Desligado"
+        }
+      },
+      "voltage": {
+        "name": "Tens\u00e3o"
+      },
+      "voltage_leg1": {
+        "name": "Tens\u00e3o fase 1"
+      },
+      "voltage_leg2": {
+        "name": "Tens\u00e3o fase 2"
+      },
+      "frequency": {
+        "name": "Frequ\u00eancia"
+      },
+      "frequency_leg1": {
+        "name": "Frequ\u00eancia fase 1"
+      },
+      "frequency_leg2": {
+        "name": "Frequ\u00eancia fase 2"
+      },
+      "current_leg1": {
+        "name": "Amperes fase 1"
+      },
+      "current_leg2": {
+        "name": "Amperes fase 2"
+      },
+      "power_leg1": {
+        "name": "Watts fase 1"
+      },
+      "power_leg2": {
+        "name": "Watts fase 2"
+      },
+      "amp_rating": {
+        "name": "Capacidade em amperes"
+      },
+      "ble_mac": {
+        "name": "Endere\u00e7o MAC BLE"
+      },
+      "ble_rssi": {
+        "name": "RSSI BLE"
+      },
+      "firmware_ble": {
+        "name": "Firmware BLE"
+      },
+      "firmware_meter": {
+        "name": "Firmware medidor"
+      },
+      "firmware_protect": {
+        "name": "Firmware prote\u00e7\u00e3o"
+      },
+      "firmware_main": {
+        "name": "Firmware"
+      },
+      "firmware_update": {
+        "name": "Atualiza\u00e7\u00e3o de firmware"
+      },
+      "firmware_bcm": {
+        "name": "Firmware BCM"
+      },
+      "firmware_bsm": {
+        "name": "Firmware BSM"
+      },
+      "firmware_bsm_radio": {
+        "name": "Firmware r\u00e1dio BSM"
+      },
+      "firmware_ncm": {
+        "name": "Firmware NCM"
+      },
+      "ip_address": {
+        "name": "Endere\u00e7o IP"
+      },
+      "mac_address": {
+        "name": "Endere\u00e7o MAC"
+      },
+      "wifi_rssi": {
+        "name": "RSSI WiFi"
+      },
+      "wifi_mode": {
+        "name": "Modo WiFi"
+      },
+      "wifi_ssid": {
+        "name": "SSID WiFi"
+      },
+      "leg": {
+        "name": "Fase"
+      },
+      "poles": {
+        "name": "Polos"
+      },
+      "position": {
+        "name": "Posi\u00e7\u00e3o"
+      },
+      "serial_number": {
+        "name": "N\u00famero de s\u00e9rie"
+      },
+      "lifetime_energy": {
+        "name": "Energia acumulada"
+      },
+      "lifetime_energy_import": {
+        "name": "Energia importada acumulada"
+      },
+      "residence_id": {
+        "name": "ID da resid\u00eancia"
+      },
+      "usage_type": {
+        "name": "Tipo de uso"
+      }
+    },
+    "switch": {
+      "breaker": {
+        "name": "Disjuntor"
+      },
+      "identify": {
+        "name": "Identificar"
+      }
+    },
+    "button": {
+      "trip": {
+        "name": "Desarmar"
+      },
+      "identify": {
+        "name": "Identificar"
+      }
+    },
+    "binary_sensor": {
+      "connectivity": {
+        "name": "Conectividade"
+      }
+    }
+  },
+  "issues": {
+    "firmware_update_available": {
+      "title": "Atualiza\u00e7\u00e3o de firmware dispon\u00edvel para {device_name}",
+      "description": "{device_name} est\u00e1 executando o firmware {current_version} e a vers\u00e3o {new_version} est\u00e1 dispon\u00edvel. Atualize o firmware usando o aplicativo My Leviton."
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Falha ao conectar ao servi\u00e7o Leviton na nuvem"
+    },
+    "invalid_auth": {
+      "message": "Credenciais da conta Leviton inv\u00e1lidas"
+    },
+    "breaker_control_failed": {
+      "message": "Falha ao controlar o disjuntor {name}: {error}"
+    },
+    "identify_failed": {
+      "message": "Falha ao identificar o dispositivo {name}: {error}"
+    }
+  }
+}
