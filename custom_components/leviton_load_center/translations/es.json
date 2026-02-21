@@ -106,10 +106,28 @@
         "name": "Energ\u00eda diaria"
       },
       "breaker_status": {
-        "name": "Estado del interruptor"
+        "name": "Estado del interruptor",
+        "state": {
+          "on": "Encendido",
+          "off": "Apagado",
+          "connecting": "Conectando",
+          "offline": "Desconectado",
+          "software_trip": "Disparo por software",
+          "gfci_fault": "Falla GFCI",
+          "afci_miswire": "Cableado incorrecto AFCI",
+          "afci_fault": "Falla AFCI",
+          "overcurrent_trip": "Disparo por sobrecorriente",
+          "overload_trip": "Disparo por sobrecarga",
+          "short_circuit_trip": "Disparo por cortocircuito",
+          "upstream_fault": "Falla aguas arriba"
+        }
       },
       "remote_status": {
-        "name": "Estado remoto"
+        "name": "Estado remoto",
+        "state": {
+          "on": "Encendido",
+          "off": "Apagado"
+        }
       },
       "voltage": {
         "name": "Voltaje"
@@ -220,6 +238,9 @@
     "switch": {
       "breaker": {
         "name": "Interruptor"
+      },
+      "identify": {
+        "name": "Identificar"
       }
     },
     "button": {

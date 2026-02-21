@@ -106,10 +106,28 @@
         "name": "\u00c9nergie quotidienne"
       },
       "breaker_status": {
-        "name": "\u00c9tat du disjoncteur"
+        "name": "\u00c9tat du disjoncteur",
+        "state": {
+          "on": "Allum\u00e9",
+          "off": "\u00c9teint",
+          "connecting": "Connexion",
+          "offline": "Hors ligne",
+          "software_trip": "D\u00e9clenchement logiciel",
+          "gfci_fault": "D\u00e9faut GFCI",
+          "afci_miswire": "C\u00e2blage incorrect AFCI",
+          "afci_fault": "D\u00e9faut AFCI",
+          "overcurrent_trip": "D\u00e9clenchement surintensit\u00e9",
+          "overload_trip": "D\u00e9clenchement surcharge",
+          "short_circuit_trip": "D\u00e9clenchement court-circuit",
+          "upstream_fault": "D\u00e9faut en amont"
+        }
       },
       "remote_status": {
-        "name": "\u00c9tat \u00e0 distance"
+        "name": "\u00c9tat \u00e0 distance",
+        "state": {
+          "on": "Allum\u00e9",
+          "off": "\u00c9teint"
+        }
       },
       "voltage": {
         "name": "Tension"
@@ -220,6 +238,9 @@
     "switch": {
       "breaker": {
         "name": "Disjoncteur"
+      },
+      "identify": {
+        "name": "Identifier"
       }
     },
     "button": {

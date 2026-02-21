@@ -106,10 +106,28 @@
         "name": "Daily energy"
       },
       "breaker_status": {
-        "name": "Breaker status"
+        "name": "Breaker status",
+        "state": {
+          "on": "On",
+          "off": "Off",
+          "connecting": "Connecting",
+          "offline": "Offline",
+          "software_trip": "Software trip",
+          "gfci_fault": "GFCI fault",
+          "afci_miswire": "AFCI miswire",
+          "afci_fault": "AFCI fault",
+          "overcurrent_trip": "Overcurrent trip",
+          "overload_trip": "Overload trip",
+          "short_circuit_trip": "Short circuit trip",
+          "upstream_fault": "Upstream fault"
+        }
       },
       "remote_status": {
-        "name": "Remote status"
+        "name": "Remote status",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
       },
       "voltage": {
         "name": "Voltage"
