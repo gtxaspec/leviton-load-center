@@ -7,6 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from aioleviton import LevitonConnectionError
+
+from homeassistant.exceptions import HomeAssistantError
+
 from homeassistant.components.leviton_load_center.coordinator import LevitonData, LevitonRuntimeData
 from homeassistant.components.leviton_load_center.entity import breaker_device_info
 from homeassistant.components.leviton_load_center.switch import (
@@ -286,3 +290,72 @@ async def test_setup_read_only_creates_no_switches() -> None:
     assert len(added_entities) == 0
 
 
+# --- Error path tests ---
+
+
+async def test_turn_on_error_raises_ha_error(mock_client) -> None:
+    """Test turn_on raises HomeAssistantError on connection failure."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    mock_client.turn_on_breaker = AsyncMock(
+        side_effect=LevitonConnectionError("Connection lost")
+    )
+    switch = _make_switch(breaker, data, mock_client)
+    switch._attr_name = "Test Breaker"
+
+    with pytest.raises(HomeAssistantError):
+        await switch.async_turn_on()
+
+
+async def test_turn_off_error_raises_ha_error(mock_client) -> None:
+    """Test turn_off raises HomeAssistantError on connection failure."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    mock_client.turn_off_breaker = AsyncMock(
+        side_effect=LevitonConnectionError("Connection lost")
+    )
+    switch = _make_switch(breaker, data, mock_client)
+    switch._attr_name = "Test Breaker"
+
+    with pytest.raises(HomeAssistantError):
+        await switch.async_turn_off()
+
+
+async def test_identify_on_error_raises_ha_error(mock_client) -> None:
+    """Test identify turn_on raises HomeAssistantError on connection failure."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    mock_client.blink_led = AsyncMock(
+        side_effect=LevitonConnectionError("Connection lost")
+    )
+    switch = _make_identify_switch(breaker, data, mock_client)
+    switch._attr_name = "Test Breaker"
+
+    with pytest.raises(HomeAssistantError):
+        await switch.async_turn_on()
+
+
+async def test_identify_off_error_raises_ha_error(mock_client) -> None:
+    """Test identify turn_off raises HomeAssistantError on connection failure."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    mock_client.stop_blink_led = AsyncMock(
+        side_effect=LevitonConnectionError("Connection lost")
+    )
+    switch = _make_identify_switch(breaker, data, mock_client)
+    switch._attr_name = "Test Breaker"
+
+    with pytest.raises(HomeAssistantError):
+        await switch.async_turn_off()

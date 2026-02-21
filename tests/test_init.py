@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,14 +18,19 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from homeassistant.components.leviton_load_center import _cleanup_hidden_devices
 from homeassistant.components.leviton_load_center.const import CONF_TOKEN, CONF_USER_ID, DOMAIN
+from homeassistant.components.leviton_load_center.coordinator import LevitonData
 
 from .conftest import (
     MOCK_AUTH_TOKEN,
+    MOCK_BREAKER_GEN1,
+    MOCK_BREAKER_GEN2,
     MOCK_EMAIL,
     MOCK_PASSWORD,
     MOCK_TOKEN,
     MOCK_USER_ID,
+    MOCK_WHEM,
 )
 
 
@@ -292,3 +298,82 @@ async def test_setup_entry_2fa_required(
         await hass.async_block_till_done()
 
         assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
+
+
+# --- _cleanup_hidden_devices tests ---
+
+
+def test_cleanup_removes_excluded_breaker(hass) -> None:
+    """Test _cleanup_hidden_devices removes device for filtered breakers."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.model = "NONE"  # is_placeholder = True
+    breaker.lsbma_id = None  # has_lsbma = False
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    entry = MagicMock()
+    entry.options = {"hide_dummy": True}
+
+    mock_device = MagicMock()
+    mock_device.id = "device_registry_id"
+
+    with patch(
+        "homeassistant.components.leviton_load_center.dr.async_get"
+    ) as mock_dr:
+        device_reg = MagicMock()
+        device_reg.async_get_device = MagicMock(return_value=mock_device)
+        device_reg.async_remove_device = MagicMock()
+        mock_dr.return_value = device_reg
+
+        _cleanup_hidden_devices(hass, entry, data)
+
+        device_reg.async_get_device.assert_called_once_with(
+            identifiers={(DOMAIN, breaker.id)}
+        )
+        device_reg.async_remove_device.assert_called_once_with("device_registry_id")
+
+
+def test_cleanup_keeps_included_breaker(hass) -> None:
+    """Test _cleanup_hidden_devices does not remove included breakers."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    entry = MagicMock()
+    entry.options = {"hide_dummy": True}
+
+    with patch(
+        "homeassistant.components.leviton_load_center.dr.async_get"
+    ) as mock_dr:
+        device_reg = MagicMock()
+        mock_dr.return_value = device_reg
+
+        _cleanup_hidden_devices(hass, entry, data)
+
+        device_reg.async_remove_device.assert_not_called()
+
+
+def test_cleanup_handles_missing_device(hass) -> None:
+    """Test _cleanup_hidden_devices handles device not in registry."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.model = "NONE"
+    breaker.lsbma_id = None
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    entry = MagicMock()
+    entry.options = {"hide_dummy": True}
+
+    with patch(
+        "homeassistant.components.leviton_load_center.dr.async_get"
+    ) as mock_dr:
+        device_reg = MagicMock()
+        device_reg.async_get_device = MagicMock(return_value=None)
+        mock_dr.return_value = device_reg
+
+        _cleanup_hidden_devices(hass, entry, data)
+
+        device_reg.async_remove_device.assert_not_called()

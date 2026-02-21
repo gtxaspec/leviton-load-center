@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,6 +18,7 @@ from homeassistant.components.leviton_load_center.coordinator import (
     LevitonCoordinator,
     LevitonData,
 )
+from homeassistant.components.leviton_load_center.energy import EnergyTracker
 
 from .conftest import (
     MOCK_AUTH_TOKEN,
@@ -1022,3 +1024,225 @@ async def test_discover_devices_breaker_fetch_failure(hass, mock_client) -> None
         if b.iot_whem_id == MOCK_WHEM.id
     ]
     assert len(whem_breakers) == 0
+
+
+# --- clamp_increasing tests ---
+
+
+def test_clamp_increasing_normal(hass) -> None:
+    """Test clamp_increasing passes through increasing values."""
+    tracker = EnergyTracker(hass, "test_entry")
+    assert tracker.clamp_increasing("key1", 100.0) == 100.0
+    assert tracker.clamp_increasing("key1", 100.5) == 100.5
+    assert tracker.clamp_increasing("key1", 200.0) == 200.0
+
+
+def test_clamp_increasing_clamps_decrease(hass) -> None:
+    """Test clamp_increasing clamps a decreasing value to high-water mark."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker.clamp_increasing("key1", 100.0)
+    # Value drops — should clamp to 100.0
+    assert tracker.clamp_increasing("key1", 99.999) == 100.0
+    assert tracker.clamp_increasing("key1", 50.0) == 100.0
+    # But a new high is passed through
+    assert tracker.clamp_increasing("key1", 100.001) == 100.001
+
+
+def test_clamp_increasing_independent_keys(hass) -> None:
+    """Test clamp_increasing tracks keys independently."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker.clamp_increasing("a", 100.0)
+    tracker.clamp_increasing("b", 200.0)
+    assert tracker.clamp_increasing("a", 50.0) == 100.0
+    assert tracker.clamp_increasing("b", 50.0) == 200.0
+
+
+# --- handle_midnight test ---
+
+
+async def test_handle_midnight(hass) -> None:
+    """Test midnight handler snapshots baselines and saves."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baseline_store = MagicMock()
+    tracker._baseline_store.async_save = AsyncMock()
+    tracker._lifetime_store = MagicMock()
+    tracker._lifetime_store.async_save = AsyncMock()
+
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+    )
+
+    await tracker.handle_midnight(data)
+
+    # Baseline snapshotted
+    assert breaker.id in data.daily_baselines
+    # Both stores saved
+    tracker._baseline_store.async_save.assert_called_once()
+    tracker._lifetime_store.async_save.assert_called_once()
+
+
+# --- _async_ws_refresh test ---
+
+
+async def test_ws_refresh_reconnects(hass, mock_client) -> None:
+    """Test WS refresh disconnects and reconnects."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(
+        whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)},
+    )
+    mock_ws = MagicMock()
+    mock_ws.disconnect = AsyncMock()
+    coordinator.ws = mock_ws
+    coordinator._ws_remove_disconnect = MagicMock()
+    coordinator._ws_remove_notification = MagicMock()
+
+    await coordinator._async_ws_refresh(None)
+
+    # Old WS was disconnected
+    mock_ws.disconnect.assert_called_once()
+    # New WS connect was attempted
+    mock_client.create_websocket.assert_called()
+
+
+async def test_ws_refresh_noop_when_disconnected(hass, mock_client) -> None:
+    """Test WS refresh does nothing when already disconnected."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData()
+    coordinator.ws = None
+
+    await coordinator._async_ws_refresh(None)
+
+    # No WS operations attempted
+    mock_client.create_websocket.assert_not_called()
+
+
+# --- _async_bandwidth_keepalive test ---
+
+
+async def test_bandwidth_keepalive_toggles(hass, mock_client) -> None:
+    """Test bandwidth keepalive toggles 1->0->1 for each WHEM."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    whem = deepcopy(MOCK_WHEM)
+    coordinator.data = LevitonData(whems={whem.id: whem})
+    coordinator.ws = MagicMock()
+
+    await coordinator._async_bandwidth_keepalive(None)
+
+    calls = mock_client.set_whem_bandwidth.call_args_list
+    assert len(calls) == 3
+    assert calls[0].kwargs == {"bandwidth": 1} or calls[0].args == (whem.id,)
+    # Verify the sequence: 1, 0, 1
+    bw_values = [c.kwargs.get("bandwidth", c.args[1] if len(c.args) > 1 else None) for c in calls]
+    assert bw_values == [1, 0, 1]
+
+
+async def test_bandwidth_keepalive_noop_when_disconnected(hass, mock_client) -> None:
+    """Test bandwidth keepalive does nothing when WS is disconnected."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
+    coordinator.ws = None
+
+    await coordinator._async_bandwidth_keepalive(None)
+
+    mock_client.set_whem_bandwidth.assert_not_called()
+
+
+async def test_bandwidth_keepalive_handles_error(hass, mock_client) -> None:
+    """Test bandwidth keepalive handles connection error gracefully."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
+    coordinator.ws = MagicMock()
+    mock_client.set_whem_bandwidth = AsyncMock(
+        side_effect=LevitonConnectionError("fail")
+    )
+
+    # Should not raise
+    await coordinator._async_bandwidth_keepalive(None)
+
+
+# --- _reconnect_websocket tests ---
+
+
+async def test_reconnect_succeeds_on_first_attempt(hass, mock_client) -> None:
+    """Test reconnect succeeds on first attempt after delay."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
+
+    with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
+        await coordinator._reconnect_websocket()
+
+    assert coordinator._reconnecting is False
+    assert coordinator.ws is not None
+
+
+async def test_reconnect_retries_on_connection_error(hass, mock_client) -> None:
+    """Test reconnect retries when API is unreachable."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
+
+    # First 2 get_permissions fail, then succeed
+    mock_client.get_permissions = AsyncMock(
+        side_effect=[
+            LevitonConnectionError("unreachable"),
+            LevitonConnectionError("unreachable"),
+            [MOCK_PERMISSION],
+            [MOCK_PERMISSION],
+            [MOCK_PERMISSION],
+        ]
+    )
+
+    with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
+        await coordinator._reconnect_websocket()
+
+    assert coordinator._reconnecting is False
+    # Got through 2 failures + successful connect
+    assert mock_client.get_permissions.call_count >= 3
+
+
+async def test_reconnect_auth_error_triggers_reauth(hass, mock_client) -> None:
+    """Test reconnect triggers reauth flow on auth error."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData()
+
+    mock_client.get_permissions = AsyncMock(
+        side_effect=LevitonAuthError("Token expired")
+    )
+
+    with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
+        await coordinator._reconnect_websocket()
+
+    entry.async_start_reauth.assert_called_once()
+    assert coordinator._reconnecting is False
+
+
+async def test_reconnect_all_attempts_fail(hass, mock_client) -> None:
+    """Test reconnect gives up after all attempts fail."""
+    entry = MagicMock()
+    coordinator = _make_coordinator(hass, entry, mock_client)
+    coordinator.data = LevitonData(whems={MOCK_WHEM.id: deepcopy(MOCK_WHEM)})
+
+    # get_permissions works but WS connect always fails
+    mock_ws = MagicMock()
+    mock_ws.connect = AsyncMock(
+        side_effect=LevitonConnectionError("WS fail")
+    )
+    mock_ws.disconnect = AsyncMock()
+    mock_ws.subscribe = AsyncMock()
+    mock_ws.on_notification = MagicMock(return_value=MagicMock())
+    mock_ws.on_disconnect = MagicMock(return_value=MagicMock())
+    mock_client.create_websocket = MagicMock(return_value=mock_ws)
+
+    with patch("homeassistant.components.leviton_load_center.websocket.asyncio.sleep", new_callable=AsyncMock):
+        await coordinator._reconnect_websocket()
+
+    assert coordinator._reconnecting is False
+    assert coordinator.ws is None

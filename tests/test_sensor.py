@@ -37,6 +37,9 @@ from homeassistant.components.leviton_load_center.sensor_descriptions import (
     _whem_total_power,
 )
 
+from homeassistant.components.leviton_load_center.coordinator import LevitonRuntimeData
+from homeassistant.components.leviton_load_center.sensor import async_setup_entry
+
 from .conftest import (
     MOCK_BREAKER_GEN1,
     MOCK_BREAKER_GEN2,
@@ -675,3 +678,88 @@ def test_calc_current_zero_divisor() -> None:
     options = {"calculated_current": True}
     result = _calc_current(breaker, data, options)
     assert result == breaker.rms_current
+
+
+# --- Platform setup tests ---
+
+
+async def test_sensor_setup_entry_creates_entities() -> None:
+    """Test async_setup_entry creates correct number of sensor entities."""
+    gen1 = deepcopy(MOCK_BREAKER_GEN1)  # is_smart=True
+    gen2 = deepcopy(MOCK_BREAKER_GEN2)  # is_smart=True
+    ct = deepcopy(MOCK_CT)
+    whem = deepcopy(MOCK_WHEM)
+    panel = deepcopy(MOCK_PANEL)
+    data = LevitonData(
+        breakers={gen1.id: gen1, gen2.id: gen2},
+        cts={str(ct.id): ct},
+        whems={whem.id: whem},
+        panels={panel.id: panel},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    from homeassistant.components.leviton_load_center.sensor import (
+        LevitonBreakerSensor,
+        LevitonCtSensor,
+        LevitonPanelSensor,
+        LevitonWhemSensor,
+    )
+    breaker_sensors = [e for e in added_entities if isinstance(e, LevitonBreakerSensor)]
+    ct_sensors = [e for e in added_entities if isinstance(e, LevitonCtSensor)]
+    whem_sensors = [e for e in added_entities if isinstance(e, LevitonWhemSensor)]
+    panel_sensors = [e for e in added_entities if isinstance(e, LevitonPanelSensor)]
+
+    # Both breakers are smart, so they get sensors (filtered by exists_fn)
+    assert len(breaker_sensors) > 0
+    # 1 CT × 10 descriptions
+    assert len(ct_sensors) == len(CT_SENSORS)
+    # 1 WHEM × 22 descriptions
+    assert len(whem_sensors) == len(WHEM_SENSORS)
+    # 1 panel × 25 descriptions
+    assert len(panel_sensors) == len(PANEL_SENSORS)
+    # Total is sum of all
+    assert len(added_entities) == len(breaker_sensors) + len(ct_sensors) + len(whem_sensors) + len(panel_sensors)
+
+
+async def test_sensor_setup_skips_unused_cts() -> None:
+    """Test async_setup_entry skips CTs with usage_type NOT_USED."""
+    ct = deepcopy(MOCK_CT)
+    ct.usage_type = "NOT_USED"
+    data = LevitonData(cts={str(ct.id): ct})
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    assert len(added_entities) == 0
+
+
+async def test_sensor_setup_skips_excluded_breakers() -> None:
+    """Test async_setup_entry skips placeholder breakers when hide_dummy=True."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.model = "NONE"
+    breaker.lsbma_id = None
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.options = {"hide_dummy": True}
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
+
+    added_entities = []
+    await async_setup_entry(MagicMock(), entry, added_entities.extend)
+
+    assert len(added_entities) == 0

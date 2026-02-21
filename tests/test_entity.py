@@ -5,9 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import MagicMock
 
+import pytest
+
 from homeassistant.components.leviton_load_center.const import DOMAIN
 from homeassistant.components.leviton_load_center.coordinator import LevitonData
 from homeassistant.components.leviton_load_center.entity import (
+    LevitonBreakerControlEntity,
     LevitonEntity,
     breaker_device_info,
     ct_device_info,
@@ -239,4 +242,124 @@ def test_entity_available_coordinator_unavailable() -> None:
     description.key = "power"
     entity = LevitonEntity(coordinator, description, whem.id, MagicMock())
     entity._collection = "whems"
+    assert entity.available is False
+
+
+# --- Parent hub offline tests ---
+
+
+def test_entity_available_breaker_whem_offline() -> None:
+    """Test breaker entity is unavailable when parent WHEM is offline."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    whem = deepcopy(MOCK_WHEM)
+    whem.connected = False
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={whem.id: whem},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, breaker.id, MagicMock())
+    assert entity.available is False
+
+
+def test_entity_available_breaker_whem_online() -> None:
+    """Test breaker entity is available when parent WHEM is online."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    whem = deepcopy(MOCK_WHEM)
+    whem.connected = True
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={whem.id: whem},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, breaker.id, MagicMock())
+    assert entity.available is True
+
+
+def test_entity_available_breaker_panel_offline() -> None:
+    """Test breaker entity is unavailable when parent panel is offline."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.iot_whem_id = None
+    breaker.residential_breaker_panel_id = MOCK_PANEL.id
+    panel = deepcopy(MOCK_PANEL)
+    panel.offline = "2026-01-01T00:00:00Z"
+    panel.online = None
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        panels={panel.id: panel},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "power"
+    entity = LevitonEntity(coordinator, description, breaker.id, MagicMock())
+    assert entity.available is False
+
+
+# --- LevitonBreakerControlEntity available tests ---
+
+
+@pytest.mark.parametrize("state", [
+    "NotCommunicating", "CommunicationFailure", "UNDEFINED",
+])
+def test_control_entity_unavailable_offline_states(state) -> None:
+    """Test control entity is unavailable when breaker is in offline state."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.current_state = state
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={whem.id: whem},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "breaker"
+    entity = LevitonBreakerControlEntity(
+        coordinator, description, breaker.id, MagicMock()
+    )
+    assert entity.available is False
+
+
+def test_control_entity_available_normal_state() -> None:
+    """Test control entity is available when breaker is in normal state."""
+    breaker = deepcopy(MOCK_BREAKER_GEN2)
+    breaker.current_state = "ManualON"
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={whem.id: whem},
+    )
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "breaker"
+    entity = LevitonBreakerControlEntity(
+        coordinator, description, breaker.id, MagicMock()
+    )
+    assert entity.available is True
+
+
+def test_control_entity_unavailable_breaker_missing() -> None:
+    """Test control entity is unavailable when breaker not in data."""
+    data = LevitonData()
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+    description = MagicMock()
+    description.key = "breaker"
+    entity = LevitonBreakerControlEntity(
+        coordinator, description, "nonexistent", MagicMock()
+    )
     assert entity.available is False

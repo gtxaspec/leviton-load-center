@@ -5,6 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from aioleviton import LevitonConnectionError
+
+from homeassistant.exceptions import HomeAssistantError
+
 from homeassistant.components.leviton_load_center.button import (
     IDENTIFY_BUTTON_DESCRIPTION,
     TRIP_BUTTON_DESCRIPTION,
@@ -149,3 +155,45 @@ async def test_setup_read_only_creates_no_buttons() -> None:
     await async_setup_entry(MagicMock(), entry, added_entities.extend)
 
     assert len(added_entities) == 0
+
+
+# --- Error path tests ---
+
+
+async def test_trip_button_error_raises_ha_error(mock_client) -> None:
+    """Test trip button raises HomeAssistantError on connection failure."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        whems={MOCK_WHEM.id: MOCK_WHEM},
+    )
+    mock_client.trip_breaker = AsyncMock(
+        side_effect=LevitonConnectionError("Connection lost")
+    )
+    coordinator = _make_coordinator(data, mock_client)
+    dev_info = breaker_device_info(breaker.id, data)
+    button = LevitonTripButton(
+        coordinator, TRIP_BUTTON_DESCRIPTION, breaker.id, dev_info
+    )
+    button._attr_name = "Test Breaker"
+
+    with pytest.raises(HomeAssistantError):
+        await button.async_press()
+
+
+async def test_whem_identify_error_raises_ha_error(mock_client) -> None:
+    """Test WHEM identify raises HomeAssistantError on connection failure."""
+    whem = deepcopy(MOCK_WHEM)
+    data = LevitonData(whems={whem.id: whem})
+    mock_client.identify_whem = AsyncMock(
+        side_effect=LevitonConnectionError("Connection lost")
+    )
+    coordinator = _make_coordinator(data, mock_client)
+    dev_info = whem_device_info(whem.id, data)
+    button = LevitonWhemIdentifyButton(
+        coordinator, IDENTIFY_BUTTON_DESCRIPTION, whem.id, dev_info
+    )
+    button._attr_name = "Test WHEM"
+
+    with pytest.raises(HomeAssistantError):
+        await button.async_press()
