@@ -4,6 +4,7 @@
   "codeowners": ["@gtxaspec"],
   "config_flow": true,
   "documentation": "https://github.com/gtxaspec/leviton-load-center",
+  "issue_tracker": "https://github.com/gtxaspec/leviton-load-center/issues",
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "loggers": ["aioleviton"],
