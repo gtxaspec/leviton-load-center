@@ -1,5 +1,7 @@
 # Leviton Load Center Integration for Home Assistant
 
+> **Note:** This integration is in a pre-production phase. Use at your own risk!
+
 Home Assistant integration for the [Leviton Smart Load Center](https://www.leviton.com/products/residential/load-centers) product family, providing real-time energy monitoring and breaker control through the Leviton cloud API.
 
 Supports both hub types and accessories:
