@@ -9,6 +9,6 @@
   "issue_tracker": "https://github.com/gtxaspec/leviton-load-center/issues",
   "loggers": ["aioleviton"],
   "quality_scale": "silver",
-  "requirements": ["aioleviton==0.2.7"],
+  "requirements": ["aioleviton==0.3.0"],
   "version": "0.1.0"
 }
