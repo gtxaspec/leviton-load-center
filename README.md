@@ -83,9 +83,9 @@ Supports both hub types and accessories:
 |--------|------|-------|
 | Voltage / Voltage leg 1 / Voltage leg 2 | Sensor | Panel voltage |
 | Frequency / Frequency leg 1 / Frequency leg 2 | Sensor | Line frequency |
-| Watts / Watts leg 1 / Watts leg 2 | Sensor | Aggregated from main CT |
-| Amps / Amps leg 1 / Amps leg 2 | Sensor | Aggregated from main CT |
-| Daily energy | Sensor | Panel-level daily energy |
+| Watts / Watts leg 1 / Watts leg 2 | Sensor | Aggregated from CTs, falls back to breaker sum if no CTs |
+| Amps / Amps leg 1 / Amps leg 2 | Sensor | Aggregated from CTs, falls back to breaker sum if no CTs |
+| Daily energy | Sensor | Panel-level daily energy (CT-based or breaker sum fallback) |
 | Identify | Button | Blink the LWHEM LED |
 | Diagnostics | Sensors | Firmware (main, BLE), firmware update status, IP, MAC, WiFi RSSI, serial, residence ID, lifetime energy |
 
