@@ -8,6 +8,7 @@ from aioleviton import Breaker, Ct
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from .coordinator import LevitonData
 
 STORAGE_VERSION = 1
+BASELINE_STORAGE_VERSION = 2
 
 # (ws_key, model_attr) tuples for energy fields
 _BREAKER_ENERGY_FIELDS = (
@@ -164,10 +166,10 @@ class EnergyTracker:
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         """Initialize energy tracking stores."""
-        self._baseline_store = Store[dict[str, float]](
-            hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.daily_baselines"
+        self._baseline_store: Store[dict[str, Any]] = Store(
+            hass, BASELINE_STORAGE_VERSION, f"{DOMAIN}.{entry_id}.daily_baselines"
         )
-        self._lifetime_store = Store[dict[str, float]](
+        self._lifetime_store: Store[dict[str, float]] = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.lifetime_energy"
         )
         self._energy_high_water: dict[str, float] = {}
@@ -199,16 +201,38 @@ class EnergyTracker:
         if changed:
             await self._lifetime_store.async_save(stored)
 
+    async def _save_baselines(self, data: LevitonData) -> None:
+        """Persist daily baselines with today's date."""
+        await self._baseline_store.async_save({
+            "date": dt_util.now().date().isoformat(),
+            "baselines": dict(data.daily_baselines),
+        })
+
     async def load_daily_baselines(self, data: LevitonData) -> None:
-        """Load daily baselines from storage, or snapshot current values."""
+        """Load daily baselines from storage, or snapshot current values.
+
+        If stored baselines are from a previous day (e.g. HA restarted after
+        midnight), re-snapshot so daily energy starts fresh for today.
+        """
         stored = await self._baseline_store.async_load()
+        today = dt_util.now().date().isoformat()
         if stored:
-            data.daily_baselines = stored
-            LOGGER.debug("Loaded %d daily baselines from storage", len(stored))
+            stored_date = stored.get("date")
+            baselines = stored.get("baselines", {})
+            if stored_date == today:
+                data.daily_baselines = baselines
+                LOGGER.debug(
+                    "Loaded %d daily baselines from storage", len(baselines)
+                )
+                return
+            LOGGER.debug(
+                "Stored baselines are from %s, re-snapshotting for %s",
+                stored_date, today,
+            )
         else:
             LOGGER.debug("No stored baselines, snapshotting current values")
-            snapshot_daily_baselines(data)
-            await self._baseline_store.async_save(data.daily_baselines)
+        snapshot_daily_baselines(data)
+        await self._save_baselines(data)
 
     async def save_lifetime_energy(self, data: LevitonData) -> None:
         """Persist current lifetime energy values for delta detection."""
@@ -223,7 +247,7 @@ class EnergyTracker:
         """Reset daily energy baselines at midnight and persist."""
         LOGGER.debug("Midnight reset: snapshotting daily energy baselines")
         snapshot_daily_baselines(data)
-        await self._baseline_store.async_save(data.daily_baselines)
+        await self._save_baselines(data)
         await self.save_lifetime_energy(data)
 
     def clamp_increasing(self, key: str, value: float) -> float:

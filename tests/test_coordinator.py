@@ -1088,7 +1088,71 @@ async def test_handle_midnight(hass) -> None:
     assert breaker.id in data.daily_baselines
     # Both stores saved
     tracker._baseline_store.async_save.assert_called_once()
+    saved_data = tracker._baseline_store.async_save.call_args[0][0]
+    assert "date" in saved_data
+    assert "baselines" in saved_data
+    assert breaker.id in saved_data["baselines"]
     tracker._lifetime_store.async_save.assert_called_once()
+
+
+async def test_load_baselines_same_day(hass) -> None:
+    """Test loading baselines from storage when date matches today."""
+    from homeassistant.util import dt as dt_util
+
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baseline_store = MagicMock()
+
+    today = dt_util.now().date().isoformat()
+    stored = {"date": today, "baselines": {"breaker1": 100.0}}
+    tracker._baseline_store.async_load = AsyncMock(return_value=stored)
+    tracker._baseline_store.async_save = AsyncMock()
+
+    data = LevitonData()
+    await tracker.load_daily_baselines(data)
+
+    assert data.daily_baselines == {"breaker1": 100.0}
+    tracker._baseline_store.async_save.assert_not_called()
+
+
+async def test_load_baselines_stale_date(hass) -> None:
+    """Test re-snapshotting when stored baselines are from a previous day."""
+    from homeassistant.util import dt as dt_util
+
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baseline_store = MagicMock()
+
+    stored = {"date": "2026-01-01", "baselines": {"breaker1": 100.0}}
+    tracker._baseline_store.async_load = AsyncMock(return_value=stored)
+    tracker._baseline_store.async_save = AsyncMock()
+
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(breakers={breaker.id: breaker})
+    await tracker.load_daily_baselines(data)
+
+    # Should have re-snapshotted with current lifetime values
+    assert breaker.id in data.daily_baselines
+    tracker._baseline_store.async_save.assert_called_once()
+    saved_data = tracker._baseline_store.async_save.call_args[0][0]
+    assert saved_data["date"] == dt_util.now().date().isoformat()
+    assert breaker.id in saved_data["baselines"]
+
+
+async def test_load_baselines_no_stored(hass) -> None:
+    """Test fresh snapshot when no baselines exist in storage."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baseline_store = MagicMock()
+    tracker._baseline_store.async_load = AsyncMock(return_value=None)
+    tracker._baseline_store.async_save = AsyncMock()
+
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(breakers={breaker.id: breaker})
+    await tracker.load_daily_baselines(data)
+
+    assert breaker.id in data.daily_baselines
+    tracker._baseline_store.async_save.assert_called_once()
+    saved_data = tracker._baseline_store.async_save.call_args[0][0]
+    assert "date" in saved_data
+    assert "baselines" in saved_data
 
 
 # --- _async_ws_refresh test ---
