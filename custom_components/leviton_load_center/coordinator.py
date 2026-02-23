@@ -334,6 +334,18 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             # WHEM hubs: skip when WS is connected (fully pushed)
             if not ws_connected:
                 for whem_id in list(self.data.whems):
+                    # Reset bandwidth before fetching so REST returns lifetime
+                    # energy values instead of period deltas. Without this,
+                    # stale deltas from a previous bandwidth=1 session get
+                    # re-added on every poll cycle, inflating energy readings.
+                    try:
+                        await self.client.set_whem_bandwidth(
+                            whem_id, bandwidth=0
+                        )
+                        await asyncio.sleep(1)
+                    except LevitonConnectionError:
+                        pass
+
                     whem = await self.client.get_whem(whem_id)
                     self.data.whems[whem_id] = whem
 
@@ -347,6 +359,17 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
 
             # DAU panels: always poll (WS only delivers power/current, not energy)
             for panel_id in list(self.data.panels):
+                if not ws_connected:
+                    # Reset bandwidth when WS is down so REST returns lifetime
+                    # energy values instead of stale period deltas.
+                    try:
+                        await self.client.set_panel_bandwidth(
+                            panel_id, enabled=False
+                        )
+                        await asyncio.sleep(1)
+                    except LevitonConnectionError:
+                        pass
+
                 panel = await self.client.get_panel(panel_id)
                 self.data.panels[panel_id] = panel
 
