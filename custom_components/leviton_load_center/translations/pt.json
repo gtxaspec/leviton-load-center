@@ -52,13 +52,15 @@
           "voltage_208": "Sistema el\u00e9trico 208V",
           "read_only": "Modo somente leitura (desativar controles)",
           "calculated_current": "Calcular corrente a partir da pot\u00eancia",
-          "hide_dummy": "Ocultar disjuntores n\u00e3o inteligentes"
+          "hide_dummy": "Ocultar disjuntores n\u00e3o inteligentes",
+          "stagger_delay": "Atraso escalonado (segundos)"
         },
         "data_description": {
           "voltage_208": "Ative para sistemas comerciais bif\u00e1sicos de 208V. Ajusta os c\u00e1lculos de tens\u00e3o bipolar de 240V para 208V.",
           "read_only": "Quando ativado, os controles de trip, liga/desliga e LED n\u00e3o s\u00e3o criados. Apenas sensores e diagn\u00f3sticos s\u00e3o exibidos.",
           "calculated_current": "Derivar amperagem a partir de pot\u00eancia/tens\u00e3o em vez do campo rmsCurrent da API para maior precis\u00e3o.",
-          "hide_dummy": "Ocultar disjuntores b\u00e1sicos que n\u00e3o possuem sensor CT LSBMA conectado."
+          "hide_dummy": "Ocultar disjuntores b\u00e1sicos que n\u00e3o possuem sensor CT LSBMA conectado.",
+          "stagger_delay": "Atraso em segundos entre cada comando de disjuntor para os bot\u00f5es Desligar todos, Ligar todos e Desarmar todos."
         }
       }
     },
@@ -83,13 +85,15 @@
           "voltage_208": "Sistema el\u00e9trico 208V",
           "read_only": "Modo somente leitura (desativar controles)",
           "calculated_current": "Calcular corrente a partir da pot\u00eancia",
-          "hide_dummy": "Ocultar disjuntores n\u00e3o inteligentes"
+          "hide_dummy": "Ocultar disjuntores n\u00e3o inteligentes",
+          "stagger_delay": "Atraso escalonado (segundos)"
         },
         "data_description": {
           "voltage_208": "Ative para sistemas comerciais bif\u00e1sicos de 208V. Ajusta os c\u00e1lculos de tens\u00e3o bipolar de 240V para 208V.",
           "read_only": "Quando ativado, os controles de trip, liga/desliga e LED n\u00e3o s\u00e3o criados. Apenas sensores e diagn\u00f3sticos s\u00e3o exibidos.",
           "calculated_current": "Derivar amperagem a partir de pot\u00eancia/tens\u00e3o em vez do campo rmsCurrent da API para maior precis\u00e3o.",
-          "hide_dummy": "Ocultar disjuntores b\u00e1sicos que n\u00e3o possuem sensor CT LSBMA conectado."
+          "hide_dummy": "Ocultar disjuntores b\u00e1sicos que n\u00e3o possuem sensor CT LSBMA conectado.",
+          "stagger_delay": "Atraso em segundos entre cada comando de disjuntor para os bot\u00f5es Desligar todos, Ligar todos e Desarmar todos."
         }
       }
     }
@@ -249,6 +253,15 @@
       },
       "identify": {
         "name": "Identificar"
+      },
+      "all_off": {
+        "name": "Desligar todos"
+      },
+      "all_on": {
+        "name": "Ligar todos"
+      },
+      "trip_all": {
+        "name": "Desarmar todos"
       }
     },
     "binary_sensor": {
@@ -275,6 +288,9 @@
     },
     "identify_failed": {
       "message": "Falha ao identificar o dispositivo {name}: {error}"
+    },
+    "bulk_control_failed": {
+      "message": "Falha ao controlar o disjuntor {name}: {error}"
     }
   }
 }

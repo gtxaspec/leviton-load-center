@@ -52,13 +52,15 @@
           "voltage_208": "Sistema el\u00e9ctrico de 208V",
           "read_only": "Modo solo lectura (desactivar controles)",
           "calculated_current": "Calcular corriente a partir de la potencia",
-          "hide_dummy": "Ocultar interruptores no inteligentes"
+          "hide_dummy": "Ocultar interruptores no inteligentes",
+          "stagger_delay": "Retardo escalonado (segundos)"
         },
         "data_description": {
           "voltage_208": "Activar para sistemas trif\u00e1sicos comerciales de 208V. Ajusta los c\u00e1lculos de voltaje bipolar de 240V a 208V.",
           "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
           "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
-          "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado."
+          "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado.",
+          "stagger_delay": "Retardo en segundos entre cada comando de interruptor para los botones Apagar todos, Encender todos y Disparar todos."
         }
       }
     },
@@ -83,13 +85,15 @@
           "voltage_208": "Sistema el\u00e9ctrico de 208V",
           "read_only": "Modo solo lectura (desactivar controles)",
           "calculated_current": "Calcular corriente a partir de la potencia",
-          "hide_dummy": "Ocultar interruptores no inteligentes"
+          "hide_dummy": "Ocultar interruptores no inteligentes",
+          "stagger_delay": "Retardo escalonado (segundos)"
         },
         "data_description": {
           "voltage_208": "Activar para sistemas trif\u00e1sicos comerciales de 208V. Ajusta los c\u00e1lculos de voltaje bipolar de 240V a 208V.",
           "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
           "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
-          "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado."
+          "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado.",
+          "stagger_delay": "Retardo en segundos entre cada comando de interruptor para los botones Apagar todos, Encender todos y Disparar todos."
         }
       }
     }
@@ -249,6 +253,15 @@
       },
       "identify": {
         "name": "Identificar"
+      },
+      "all_off": {
+        "name": "Apagar todos"
+      },
+      "all_on": {
+        "name": "Encender todos"
+      },
+      "trip_all": {
+        "name": "Disparar todos"
       }
     },
     "binary_sensor": {
@@ -275,6 +288,9 @@
     },
     "identify_failed": {
       "message": "Error al identificar el dispositivo {name}: {error}"
+    },
+    "bulk_control_failed": {
+      "message": "Error al controlar el interruptor {name}: {error}"
     }
   }
 }

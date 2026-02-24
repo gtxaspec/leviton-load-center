@@ -52,13 +52,15 @@
           "voltage_208": "Syst\u00e8me \u00e9lectrique 208V",
           "read_only": "Mode lecture seule (d\u00e9sactiver les commandes)",
           "calculated_current": "Calculer le courant \u00e0 partir de la puissance",
-          "hide_dummy": "Masquer les disjoncteurs non intelligents"
+          "hide_dummy": "Masquer les disjoncteurs non intelligents",
+          "stagger_delay": "D\u00e9lai \u00e9chelonn\u00e9 (secondes)"
         },
         "data_description": {
           "voltage_208": "Activer pour les syst\u00e8mes triphas\u00e9s commerciaux 208V. Ajuste les calculs de tension bipolaire de 240V \u00e0 208V.",
           "read_only": "Lorsqu'il est activ\u00e9, les commandes de d\u00e9clenchement, marche/arr\u00eat et LED ne sont pas cr\u00e9\u00e9es. Seuls les capteurs et diagnostics sont affich\u00e9s.",
           "calculated_current": "D\u00e9river l'amp\u00e9rage \u00e0 partir de la puissance/tension au lieu du champ rmsCurrent de l'API pour une meilleure pr\u00e9cision.",
-          "hide_dummy": "Masquer les disjoncteurs de base qui n'ont pas de capteur CT LSBMA connect\u00e9."
+          "hide_dummy": "Masquer les disjoncteurs de base qui n'ont pas de capteur CT LSBMA connect\u00e9.",
+          "stagger_delay": "D\u00e9lai en secondes entre chaque commande de disjoncteur pour les boutons Tout \u00e9teindre, Tout allumer et D\u00e9clencher tout."
         }
       }
     },
@@ -83,13 +85,15 @@
           "voltage_208": "Syst\u00e8me \u00e9lectrique 208V",
           "read_only": "Mode lecture seule (d\u00e9sactiver les commandes)",
           "calculated_current": "Calculer le courant \u00e0 partir de la puissance",
-          "hide_dummy": "Masquer les disjoncteurs non intelligents"
+          "hide_dummy": "Masquer les disjoncteurs non intelligents",
+          "stagger_delay": "D\u00e9lai \u00e9chelonn\u00e9 (secondes)"
         },
         "data_description": {
           "voltage_208": "Activer pour les syst\u00e8mes triphas\u00e9s commerciaux 208V. Ajuste les calculs de tension bipolaire de 240V \u00e0 208V.",
           "read_only": "Lorsqu'il est activ\u00e9, les commandes de d\u00e9clenchement, marche/arr\u00eat et LED ne sont pas cr\u00e9\u00e9es. Seuls les capteurs et diagnostics sont affich\u00e9s.",
           "calculated_current": "D\u00e9river l'amp\u00e9rage \u00e0 partir de la puissance/tension au lieu du champ rmsCurrent de l'API pour une meilleure pr\u00e9cision.",
-          "hide_dummy": "Masquer les disjoncteurs de base qui n'ont pas de capteur CT LSBMA connect\u00e9."
+          "hide_dummy": "Masquer les disjoncteurs de base qui n'ont pas de capteur CT LSBMA connect\u00e9.",
+          "stagger_delay": "D\u00e9lai en secondes entre chaque commande de disjoncteur pour les boutons Tout \u00e9teindre, Tout allumer et D\u00e9clencher tout."
         }
       }
     }
@@ -249,6 +253,15 @@
       },
       "identify": {
         "name": "Identifier"
+      },
+      "all_off": {
+        "name": "Tout \u00e9teindre"
+      },
+      "all_on": {
+        "name": "Tout allumer"
+      },
+      "trip_all": {
+        "name": "D\u00e9clencher tout"
       }
     },
     "binary_sensor": {
@@ -275,6 +288,9 @@
     },
     "identify_failed": {
       "message": "\u00c9chec de l'identification de l'appareil {name}\u00a0: {error}"
+    },
+    "bulk_control_failed": {
+      "message": "\u00c9chec du contr\u00f4le du disjoncteur {name}\u00a0: {error}"
     }
   }
 }

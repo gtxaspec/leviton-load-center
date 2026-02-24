@@ -6,6 +6,12 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
+
 from aioleviton import (
     LevitonAuthError,
     LevitonClient,
@@ -28,12 +34,14 @@ from .const import (
     CONF_CALCULATED_CURRENT,
     CONF_HIDE_DUMMY,
     CONF_READ_ONLY,
+    CONF_STAGGER_DELAY,
     CONF_TOKEN,
     CONF_USER_ID,
     CONF_VOLTAGE_208,
     DEFAULT_CALCULATED_CURRENT,
     DEFAULT_HIDE_DUMMY,
     DEFAULT_READ_ONLY,
+    DEFAULT_STAGGER_DELAY,
     DEFAULT_VOLTAGE_208,
     DOMAIN,
     LOGGER,
@@ -49,6 +57,14 @@ OPTIONS_SCHEMA = vol.Schema(
             CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT
         ): bool,
         vol.Optional(CONF_HIDE_DUMMY, default=DEFAULT_HIDE_DUMMY): bool,
+        vol.Optional(
+            CONF_STAGGER_DELAY, default=DEFAULT_STAGGER_DELAY
+        ): NumberSelector(
+            NumberSelectorConfig(
+                min=1, max=10, step=1, mode=NumberSelectorMode.BOX,
+                unit_of_measurement="s",
+            )
+        ),
     }
 )
 

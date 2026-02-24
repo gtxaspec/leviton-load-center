@@ -52,13 +52,15 @@
           "voltage_208": "208V electrical system",
           "read_only": "Read-only mode (disable controls)",
           "calculated_current": "Calculate current from power",
-          "hide_dummy": "Hide non-smart breakers"
+          "hide_dummy": "Hide non-smart breakers",
+          "stagger_delay": "Stagger delay (seconds)"
         },
         "data_description": {
           "voltage_208": "Enable for 208V commercial split-phase systems. Adjusts 2-pole voltage calculations from 240V to 208V.",
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
-          "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached."
+          "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached.",
+          "stagger_delay": "Delay in seconds between each breaker command for All Off, All On, and Trip All buttons."
         }
       }
     },
@@ -83,13 +85,15 @@
           "voltage_208": "208V electrical system",
           "read_only": "Read-only mode (disable controls)",
           "calculated_current": "Calculate current from power",
-          "hide_dummy": "Hide non-smart breakers"
+          "hide_dummy": "Hide non-smart breakers",
+          "stagger_delay": "Stagger delay (seconds)"
         },
         "data_description": {
           "voltage_208": "Enable for 208V commercial split-phase systems. Adjusts 2-pole voltage calculations from 240V to 208V.",
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
-          "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached."
+          "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached.",
+          "stagger_delay": "Delay in seconds between each breaker command for All Off, All On, and Trip All buttons."
         }
       }
     }
@@ -249,6 +253,15 @@
       },
       "identify": {
         "name": "Identify"
+      },
+      "all_off": {
+        "name": "All off"
+      },
+      "all_on": {
+        "name": "All on"
+      },
+      "trip_all": {
+        "name": "Trip all"
       }
     },
     "binary_sensor": {
@@ -275,6 +288,9 @@
     },
     "identify_failed": {
       "message": "Failed to identify device {name}: {error}"
+    },
+    "bulk_control_failed": {
+      "message": "Failed to control breaker {name}: {error}"
     }
   }
 }

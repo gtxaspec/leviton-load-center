@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from aioleviton import LevitonConnectionError
 
 from homeassistant.components.button import (
@@ -15,9 +17,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_READ_ONLY,
+    CONF_STAGGER_DELAY,
     DEFAULT_READ_ONLY,
+    DEFAULT_STAGGER_DELAY,
     DOMAIN,
     LOGGER,
+    STATE_REMOTE_OFF,
+    STATE_REMOTE_ON,
     STATE_SOFTWARE_TRIP,
 )
 from .coordinator import LevitonConfigEntry
@@ -25,6 +31,7 @@ from .entity import (
     LevitonBreakerControlEntity,
     LevitonEntity,
     breaker_device_info,
+    panel_device_info,
     should_include_breaker,
     whem_device_info,
 )
@@ -39,6 +46,21 @@ TRIP_BUTTON_DESCRIPTION = ButtonEntityDescription(
 IDENTIFY_BUTTON_DESCRIPTION = ButtonEntityDescription(
     key="identify",
     translation_key="identify",
+)
+
+ALL_OFF_BUTTON_DESCRIPTION = ButtonEntityDescription(
+    key="all_off",
+    translation_key="all_off",
+)
+
+ALL_ON_BUTTON_DESCRIPTION = ButtonEntityDescription(
+    key="all_on",
+    translation_key="all_on",
+)
+
+TRIP_ALL_BUTTON_DESCRIPTION = ButtonEntityDescription(
+    key="trip_all",
+    translation_key="trip_all",
 )
 
 
@@ -68,12 +90,31 @@ async def async_setup_entry(
                 )
             )
 
-    # WHEM identify button
+    # WHEM buttons: identify, all off, all on
     for whem_id in data.whems:
         dev_info = whem_device_info(whem_id, data)
         entities.append(
             LevitonWhemIdentifyButton(
                 coordinator, IDENTIFY_BUTTON_DESCRIPTION, whem_id, dev_info
+            )
+        )
+        entities.append(
+            LevitonWhemAllOffButton(
+                coordinator, ALL_OFF_BUTTON_DESCRIPTION, whem_id, dev_info
+            )
+        )
+        entities.append(
+            LevitonWhemAllOnButton(
+                coordinator, ALL_ON_BUTTON_DESCRIPTION, whem_id, dev_info
+            )
+        )
+
+    # Panel buttons: trip all
+    for panel_id in data.panels:
+        dev_info = panel_device_info(panel_id, data)
+        entities.append(
+            LevitonPanelTripAllButton(
+                coordinator, TRIP_ALL_BUTTON_DESCRIPTION, panel_id, dev_info
             )
         )
 
@@ -138,3 +179,113 @@ class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
                     "error": str(err),
                 },
             ) from err
+
+
+class LevitonWhemAllOffButton(LevitonEntity, ButtonEntity):
+    """Button to turn off all breakers on a WHEM hub."""
+
+    _collection = "whems"
+
+    async def async_press(self) -> None:
+        """Turn off all child breakers sequentially."""
+        delay = self.coordinator.config_entry.options.get(
+            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
+        )
+        children = [
+            (bid, b)
+            for bid, b in self.coordinator.data.breakers.items()
+            if b.iot_whem_id == self._device_id and b.is_smart
+        ]
+        LOGGER.debug("All Off for WHEM %s: %d breakers", self._device_id, len(children))
+        for i, (breaker_id, breaker) in enumerate(children):
+            if i > 0:
+                await asyncio.sleep(delay)
+            try:
+                if breaker.can_remote_on:
+                    await self.coordinator.client.turn_off_breaker(breaker_id)
+                    breaker.remote_state = STATE_REMOTE_OFF
+                else:
+                    await self.coordinator.client.trip_breaker(breaker_id)
+                    breaker.current_state = STATE_SOFTWARE_TRIP
+            except LevitonConnectionError as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="bulk_control_failed",
+                    translation_placeholders={
+                        "name": breaker_id,
+                        "error": str(err),
+                    },
+                ) from err
+        self.coordinator.async_set_updated_data(self.coordinator.data)
+
+
+class LevitonWhemAllOnButton(LevitonEntity, ButtonEntity):
+    """Button to turn on all Gen 2 breakers on a WHEM hub."""
+
+    _collection = "whems"
+
+    async def async_press(self) -> None:
+        """Turn on all Gen 2 child breakers sequentially."""
+        delay = self.coordinator.config_entry.options.get(
+            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
+        )
+        children = [
+            (bid, b)
+            for bid, b in self.coordinator.data.breakers.items()
+            if b.iot_whem_id == self._device_id
+            and b.is_smart
+            and b.can_remote_on
+        ]
+        LOGGER.debug("All On for WHEM %s: %d breakers", self._device_id, len(children))
+        for i, (breaker_id, breaker) in enumerate(children):
+            if i > 0:
+                await asyncio.sleep(delay)
+            try:
+                await self.coordinator.client.turn_on_breaker(breaker_id)
+                breaker.remote_state = STATE_REMOTE_ON
+            except LevitonConnectionError as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="bulk_control_failed",
+                    translation_placeholders={
+                        "name": breaker_id,
+                        "error": str(err),
+                    },
+                ) from err
+        self.coordinator.async_set_updated_data(self.coordinator.data)
+
+
+class LevitonPanelTripAllButton(LevitonEntity, ButtonEntity):
+    """Button to trip all breakers on an LDATA panel."""
+
+    _collection = "panels"
+
+    async def async_press(self) -> None:
+        """Trip all child breakers sequentially."""
+        delay = self.coordinator.config_entry.options.get(
+            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
+        )
+        children = [
+            (bid, b)
+            for bid, b in self.coordinator.data.breakers.items()
+            if b.residential_breaker_panel_id == self._device_id and b.is_smart
+        ]
+        LOGGER.debug(
+            "Trip All for panel %s: %d breakers", self._device_id, len(children)
+        )
+        for i, (breaker_id, breaker) in enumerate(children):
+            if i > 0:
+                await asyncio.sleep(delay)
+            try:
+                await self.coordinator.client.trip_breaker(breaker_id)
+                breaker.current_state = STATE_SOFTWARE_TRIP
+            except LevitonConnectionError as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="bulk_control_failed",
+                    translation_placeholders={
+                        "name": breaker_id,
+                        "error": str(err),
+                    },
+                ) from err
+        self.coordinator.async_set_updated_data(self.coordinator.data)
