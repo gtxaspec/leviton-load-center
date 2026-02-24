@@ -14,6 +14,7 @@ Supports both hub types and accessories:
 - Real-time power, current, voltage, and frequency monitoring
 - Lifetime and daily energy tracking (compatible with HA Energy Dashboard)
 - Remote breaker control (on/off for Gen 2, trip for Gen 1)
+- Bulk breaker control (All Off, All On, Trip All) with configurable stagger delay
 - Breaker identify (LED blink)
 - CT clamp monitoring (LWHEM only)
 - Per-leg measurements for 2-pole breakers and panel-level aggregates
@@ -52,6 +53,7 @@ Supports both hub types and accessories:
 | Read-only mode | Off | Disables all control entities (trip, on/off, identify). Only sensors and diagnostics are created. |
 | Calculate current from power | Off | Derives amperage from power/voltage instead of the raw `rmsCurrent` field for higher precision. |
 | Hide non-smart breakers | Off | Hides basic breakers that don't have an LSBMA CT sensor attached. |
+| Stagger delay | 2s | Delay in seconds between each breaker command for All Off, All On, and Trip All buttons (1–10s). |
 
 ## Entities
 
@@ -66,7 +68,7 @@ Supports both hub types and accessories:
 | Operational status | Sensor | operationalState |
 | Remote status | Sensor | Gen 2 only (RemoteON/RemoteOFF) |
 | Breaker on/off | Switch | Gen 2 only (`canRemoteOn: true`) |
-| Trip | Button | All smart breakers |
+| Trip | Button | Gen 1 only (Gen 2 uses switch turn off) |
 | Identify LED | Switch | Blink the breaker's LED |
 | Connectivity | Binary sensor | BLE connection to hub |
 | Diagnostics | Sensors | Lifetime energy, amp rating, BLE RSSI, firmware versions, position, leg, poles, serial |
@@ -89,6 +91,8 @@ Supports both hub types and accessories:
 | Amps / Amps leg 1 / Amps leg 2 | Sensor | Aggregated from CTs, falls back to breaker sum if no CTs |
 | Daily energy | Sensor | Panel-level daily energy (CT-based or breaker sum fallback) |
 | Identify | Button | Blink the LWHEM LED |
+| All off | Button | Turn off all child breakers (Gen 2 off, Gen 1 trip) |
+| All on | Button | Turn on all Gen 2 child breakers (Gen 1 skipped) |
 | Diagnostics | Sensors | Firmware (main, BLE), firmware update status, IP, MAC, WiFi RSSI, serial, residence ID, lifetime energy |
 
 ### LDATA Panel
@@ -100,6 +104,7 @@ Supports both hub types and accessories:
 | Watts / Watts leg 1 / Watts leg 2 | Sensor | Aggregated from breakers |
 | Amps / Amps leg 1 / Amps leg 2 | Sensor | Aggregated from breakers |
 | Daily energy | Sensor | Panel-level daily energy |
+| Trip all | Button | Trip all child breakers |
 | Connectivity | Binary sensor | Online/offline status |
 | Diagnostics | Sensors | Firmware (main, BCM, BSM, BSM radio, NCM), firmware update status, WiFi RSSI/SSID/mode, serial, residence ID, lifetime energy |
 
