@@ -47,43 +47,47 @@ _CT_CACHE_FIELDS = (
 )
 
 
-def _accumulate_energy(
+def _normalize_energy(
     ws_data: dict[str, Any],
     model: Breaker | Ct,
     fields: tuple[tuple[str, str], ...],
 ) -> None:
-    """Convert WS energy deltas to accumulated lifetime values.
+    """Normalize WS energy values so model.update() always sets lifetime totals.
 
-    The WS delivers energyConsumption as a delta (energy since last report),
-    not the lifetime total that the REST API returns. We accumulate deltas
-    onto the current lifetime value so sensors stay correct.
+    The Leviton WS delivers energyConsumption in two modes:
+    - bandwidth=2 (normal): full lifetime totals — use directly.
+    - bandwidth=1 (streaming): period deltas — discard, because the
+      server's next lifetime update already includes the energy.
+      Accumulating deltas would double-count.
 
-    Safety: if the WS value is large relative to the current lifetime
-    (>50% of current), it's a full lifetime value from a state flood,
-    not a delta. Leave it as-is (lifetime replacement).
+    Detection: if the WS value is >50% of the model's current lifetime,
+    it's a lifetime total. Otherwise it's a bandwidth=1 delta — remove
+    it from ws_data so model.update() preserves the current lifetime.
     """
     for ws_key, attr in fields:
-        delta = ws_data.get(ws_key)
-        if delta is not None:
+        raw = ws_data.get(ws_key)
+        if raw is not None:
             current = getattr(model, attr) or 0
-            if current > 0 and delta > current * 0.5:
-                ws_data[ws_key] = round(max(delta, current), 3)
+            if current == 0 or raw > current * 0.5:
+                # Lifetime total (or first value) — use server value
+                ws_data[ws_key] = round(raw, 3)
             else:
-                ws_data[ws_key] = round(current + delta, 3)
+                # Bandwidth=1 delta — discard to avoid double-counting
+                del ws_data[ws_key]
 
 
-def accumulate_breaker_energy(
+def normalize_breaker_energy(
     breaker_data: dict[str, Any], breaker: Breaker
 ) -> None:
-    """Convert WS energy deltas to accumulated lifetime values for breakers."""
-    _accumulate_energy(breaker_data, breaker, _BREAKER_ENERGY_FIELDS)
+    """Normalize WS breaker energy: accept lifetimes, discard deltas."""
+    _normalize_energy(breaker_data, breaker, _BREAKER_ENERGY_FIELDS)
 
 
-def accumulate_ct_energy(
+def normalize_ct_energy(
     ct_data: dict[str, Any], ct: Ct
 ) -> None:
-    """Convert WS energy deltas to accumulated lifetime values for CTs."""
-    _accumulate_energy(ct_data, ct, _CT_ENERGY_FIELDS)
+    """Normalize WS CT energy: accept lifetimes, discard deltas."""
+    _normalize_energy(ct_data, ct, _CT_ENERGY_FIELDS)
 
 
 def calc_daily_energy(

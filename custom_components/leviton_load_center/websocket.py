@@ -14,7 +14,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import LOGGER, STATE_SOFTWARE_TRIP
-from .energy import accumulate_breaker_energy, accumulate_ct_energy
+from .energy import normalize_breaker_energy, normalize_ct_energy
 
 if TYPE_CHECKING:
     from .coordinator import LevitonCoordinator
@@ -90,9 +90,12 @@ class WebSocketManager:
 
         data = coordinator.data
 
-        # Subscribe to all LWHEM hubs and enable bandwidth
+        # Subscribe to all LWHEM hubs and trigger energy data immediately
+        # via 1→0→1 bandwidth toggle (same as the periodic keepalive).
         for whem_id in data.whems:
             try:
+                await client.set_whem_bandwidth(whem_id, bandwidth=1)
+                await client.set_whem_bandwidth(whem_id, bandwidth=0)
                 await client.set_whem_bandwidth(whem_id, bandwidth=1)
                 await self.ws.subscribe("IotWhem", whem_id)
             except LevitonConnectionError:
@@ -304,7 +307,7 @@ class WebSocketManager:
         if not breaker_id or breaker_id not in data.breakers:
             return False
         breaker = data.breakers[breaker_id]
-        accumulate_breaker_energy(breaker_data, breaker)
+        normalize_breaker_energy(breaker_data, breaker)
         if breaker_data.get("remoteTrip") and not breaker.can_remote_on:
             breaker_data.setdefault("currentState", STATE_SOFTWARE_TRIP)
         breaker.update(breaker_data)
@@ -344,7 +347,7 @@ class WebSocketManager:
                     if ct_id is not None:
                         ct_key = str(ct_id)
                         if ct_key in coordinator_data.cts:
-                            accumulate_ct_energy(
+                            normalize_ct_energy(
                                 ct_data, coordinator_data.cts[ct_key]
                             )
                             coordinator_data.cts[ct_key].update(ct_data)
@@ -386,7 +389,7 @@ class WebSocketManager:
         elif model_name == "IotCt":
             ct_key = str(model_id)
             if ct_key in coordinator_data.cts:
-                accumulate_ct_energy(
+                normalize_ct_energy(
                     data_payload, coordinator_data.cts[ct_key]
                 )
                 coordinator_data.cts[ct_key].update(data_payload)

@@ -21,8 +21,8 @@ from homeassistant.components.leviton_load_center.coordinator import (
 )
 from homeassistant.components.leviton_load_center.energy import (
     EnergyTracker,
-    accumulate_breaker_energy,
-    accumulate_ct_energy,
+    normalize_breaker_energy,
+    normalize_ct_energy,
     calc_daily_energy,
 )
 from homeassistant.components.leviton_load_center.websocket import (
@@ -689,8 +689,8 @@ async def test_async_update_data_rest_poll_refreshes(hass, mock_client) -> None:
 # --- Energy accumulation tests ---
 
 
-def test_accumulate_breaker_energy_adds_delta() -> None:
-    """Test WS energy deltas are accumulated onto current lifetime."""
+def test_normalize_breaker_energy_discards_delta() -> None:
+    """Test WS energy deltas are discarded to avoid double-counting."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.energy_consumption = 3400.0
     breaker.energy_consumption_2 = 100.0
@@ -704,68 +704,88 @@ def test_accumulate_breaker_energy_adds_delta() -> None:
         "power": 120,
     }
 
-    accumulate_breaker_energy(ws_data, breaker)
+    normalize_breaker_energy(ws_data, breaker)
 
-    assert ws_data["energyConsumption"] == 3400.5
-    assert ws_data["energyConsumption2"] == 100.1
-    assert ws_data["energyImport"] == 50.02
+    # Small deltas removed — server's next lifetime update includes them
+    assert "energyConsumption" not in ws_data
+    assert "energyConsumption2" not in ws_data
+    assert "energyImport" not in ws_data
     # Non-energy fields should be unchanged
     assert ws_data["power"] == 120
 
 
-def test_accumulate_breaker_energy_none_current() -> None:
+def test_normalize_breaker_energy_none_current() -> None:
     """Test accumulation when current energy is None (treats as 0)."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.energy_consumption = None
 
     ws_data = {"energyConsumption": 0.5}
 
-    accumulate_breaker_energy(ws_data, breaker)
+    normalize_breaker_energy(ws_data, breaker)
 
     assert ws_data["energyConsumption"] == 0.5
 
 
-def test_accumulate_breaker_energy_no_energy_fields() -> None:
+def test_normalize_breaker_energy_no_energy_fields() -> None:
     """Test accumulation with no energy fields in WS data is a no-op."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     original_energy = breaker.energy_consumption
 
     ws_data = {"power": 120, "rmsCurrent": 1}
 
-    accumulate_breaker_energy(ws_data, breaker)
+    normalize_breaker_energy(ws_data, breaker)
 
     # No energy fields modified
     assert "energyConsumption" not in ws_data
     assert breaker.energy_consumption == original_energy
 
 
-def test_accumulate_breaker_energy_lifetime_passthrough() -> None:
+def test_normalize_breaker_energy_lifetime_passthrough() -> None:
     """Test WS value larger than current is treated as lifetime, not delta."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
     breaker.energy_consumption = 3400.0
 
     ws_data = {"energyConsumption": 3400.5}
 
-    accumulate_breaker_energy(ws_data, breaker)
+    normalize_breaker_energy(ws_data, breaker)
 
     # Value exceeds current — left as-is (lifetime replacement)
     assert ws_data["energyConsumption"] == 3400.5
 
 
-def test_accumulate_ct_energy_lifetime_passthrough() -> None:
+def test_accumulate_lifetime_tracks_server_when_current_higher() -> None:
+    """Test lifetime mode uses server value even when our rounded value is higher.
+
+    After delta accumulation, round() can inflate our value slightly above
+    the server's actual lifetime. The lifetime branch must use the server
+    value directly (not max) so energy tracking doesn't stall.
+    """
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_consumption = 3427.55  # our rounded value
+
+    # Server lifetime is 3427.546 — slightly lower than our rounded value
+    ws_data = {"energyConsumption": 3427.546}
+
+    normalize_breaker_energy(ws_data, breaker)
+
+    # Should follow the server value, not stay stuck at 3427.55
+    assert ws_data["energyConsumption"] == 3427.546
+
+
+def test_normalize_ct_energy_lifetime_passthrough() -> None:
     """Test WS CT value larger than current is treated as lifetime."""
     ct = deepcopy(MOCK_CT)
     ct.energy_consumption = 5000.0
 
     ws_data = {"energyConsumption": 5001.0}
 
-    accumulate_ct_energy(ws_data, ct)
+    normalize_ct_energy(ws_data, ct)
 
     assert ws_data["energyConsumption"] == 5001.0
 
 
-def test_accumulate_ct_energy_adds_delta() -> None:
-    """Test WS energy deltas are accumulated onto current CT lifetime."""
+def test_normalize_ct_energy_discards_delta() -> None:
+    """Test WS CT energy deltas are discarded to avoid double-counting."""
     ct = deepcopy(MOCK_CT)
     ct.energy_consumption = 5000.0
     ct.energy_consumption_2 = 4500.0
@@ -779,16 +799,17 @@ def test_accumulate_ct_energy_adds_delta() -> None:
         "energyImport2": 0.05,
     }
 
-    accumulate_ct_energy(ws_data, ct)
+    normalize_ct_energy(ws_data, ct)
 
-    assert ws_data["energyConsumption"] == 5001.0
-    assert ws_data["energyConsumption2"] == 4500.5
-    assert ws_data["energyImport"] == 100.1
-    assert ws_data["energyImport2"] == 90.05
+    # All small deltas removed
+    assert "energyConsumption" not in ws_data
+    assert "energyConsumption2" not in ws_data
+    assert "energyImport" not in ws_data
+    assert "energyImport2" not in ws_data
 
 
-def test_ws_breaker_energy_accumulated_via_whem(hass, mock_client) -> None:
-    """Test WS breaker energy deltas are accumulated via IotWhem handler."""
+def test_ws_breaker_energy_delta_discarded_via_whem(hass, mock_client) -> None:
+    """Test WS breaker energy deltas are discarded via IotWhem handler."""
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     breaker = deepcopy(MOCK_BREAKER_GEN1)
@@ -810,11 +831,12 @@ def test_ws_breaker_energy_accumulated_via_whem(hass, mock_client) -> None:
 
     coordinator.ws_manager._handle_ws_notification(notification)
 
-    assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.25
+    # Delta discarded — energy unchanged
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 3400.0
 
 
-def test_ws_breaker_energy_accumulated_direct(hass, mock_client) -> None:
-    """Test WS breaker energy deltas are accumulated via direct handler."""
+def test_ws_breaker_energy_lifetime_applied_direct(hass, mock_client) -> None:
+    """Test WS breaker lifetime values are applied via direct handler."""
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     breaker = deepcopy(MOCK_BREAKER_GEN2)
@@ -826,16 +848,17 @@ def test_ws_breaker_energy_accumulated_direct(hass, mock_client) -> None:
     notification = {
         "modelName": "ResidentialBreaker",
         "modelId": breaker.id,
-        "data": {"energyConsumption": 0.1},
+        "data": {"energyConsumption": 1500.5},
     }
 
     coordinator.ws_manager._handle_ws_notification(notification)
 
-    assert coordinator.data.breakers[breaker.id].energy_consumption == 1500.1
+    # Lifetime value applied directly
+    assert coordinator.data.breakers[breaker.id].energy_consumption == 1500.5
 
 
-def test_ws_ct_energy_accumulated(hass, mock_client) -> None:
-    """Test WS CT energy deltas are accumulated."""
+def test_ws_ct_energy_delta_discarded(hass, mock_client) -> None:
+    """Test WS CT energy deltas are discarded."""
     entry = MagicMock()
     coordinator = _make_coordinator(hass, entry, mock_client)
     ct = deepcopy(MOCK_CT)
@@ -852,7 +875,8 @@ def test_ws_ct_energy_accumulated(hass, mock_client) -> None:
 
     coordinator.ws_manager._handle_ws_notification(notification)
 
-    assert coordinator.data.cts[str(ct.id)].energy_consumption == 5000.5
+    # Delta discarded — energy unchanged
+    assert coordinator.data.cts[str(ct.id)].energy_consumption == 5000.0
 
 
 async def test_correct_energy_values_detects_deltas(hass, mock_client) -> None:
@@ -951,8 +975,8 @@ async def test_async_setup_full_flow(
     mock_websocket.connect.assert_called_once()
     # Subscribed to WHEM + panel at minimum
     assert mock_websocket.subscribe.call_count >= 2
-    # Bandwidth reset (discovery) then enabled (WS connect)
-    assert mock_client.set_whem_bandwidth.call_count == 2
+    # Bandwidth reset (discovery) then 1→0→1 toggle (WS connect)
+    assert mock_client.set_whem_bandwidth.call_count == 4
     mock_client.set_whem_bandwidth.assert_any_call(MOCK_WHEM.id, bandwidth=0)
     mock_client.set_whem_bandwidth.assert_any_call(MOCK_WHEM.id, bandwidth=1)
     assert mock_client.set_panel_bandwidth.call_count == 2
