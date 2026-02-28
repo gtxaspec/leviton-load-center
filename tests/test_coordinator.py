@@ -1177,6 +1177,61 @@ async def test_load_baselines_no_stored(hass) -> None:
     saved_data = tracker._baseline_store.async_save.call_args[0][0]
     assert "date" in saved_data
     assert "baselines" in saved_data
+    assert tracker._baselines_provisional is True
+
+
+async def test_validate_baselines_detects_deltas(hass) -> None:
+    """Test that validate_baselines re-snapshots when deltas contaminate baselines."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baseline_store = MagicMock()
+    tracker._baseline_store.async_load = AsyncMock(return_value=None)
+    tracker._baseline_store.async_save = AsyncMock()
+
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    # Simulate bandwidth-1 delta: low energy at startup
+    breaker.energy_consumption = 0.17
+    data = LevitonData(breakers={breaker.id: breaker})
+    await tracker.load_daily_baselines(data)
+
+    assert data.daily_baselines[breaker.id] == 0.17
+    assert tracker._baselines_provisional is True
+
+    # Now WS has delivered the real lifetime value
+    breaker.energy_consumption = 3434.508
+    result = await tracker.validate_baselines(data)
+
+    assert result is True
+    assert data.daily_baselines[breaker.id] == 3434.508
+    assert tracker._baselines_provisional is False
+
+
+async def test_validate_baselines_no_action_when_correct(hass) -> None:
+    """Test that validate_baselines does nothing when baselines are correct."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baseline_store = MagicMock()
+    tracker._baseline_store.async_load = AsyncMock(return_value=None)
+    tracker._baseline_store.async_save = AsyncMock()
+
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    data = LevitonData(breakers={breaker.id: breaker})
+    await tracker.load_daily_baselines(data)
+
+    # Lifetime is close to baseline (normal operation)
+    result = await tracker.validate_baselines(data)
+
+    assert result is False
+    assert tracker._baselines_provisional is False
+
+
+async def test_validate_baselines_skips_when_loaded(hass) -> None:
+    """Test that validate_baselines skips when baselines were loaded from storage."""
+    tracker = EnergyTracker(hass, "test_entry")
+    tracker._baselines_provisional = False
+
+    data = LevitonData()
+    result = await tracker.validate_baselines(data)
+
+    assert result is False
 
 
 # --- _async_ws_refresh test ---

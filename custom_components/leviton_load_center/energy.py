@@ -23,6 +23,7 @@ _BREAKER_ENERGY_FIELDS = (
     ("energyConsumption", "energy_consumption"),
     ("energyConsumption2", "energy_consumption_2"),
     ("energyImport", "energy_import"),
+    ("energyImport2", "energy_import_2"),
 )
 
 _CT_ENERGY_FIELDS = (
@@ -37,6 +38,7 @@ _BREAKER_CACHE_FIELDS = (
     ("energy_consumption", ""),
     ("energy_consumption_2", "_2"),
     ("energy_import", "_import"),
+    ("energy_import_2", "_import_2"),
 )
 
 _CT_CACHE_FIELDS = (
@@ -177,6 +179,7 @@ class EnergyTracker:
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.lifetime_energy"
         )
         self._energy_high_water: dict[str, float] = {}
+        self._baselines_provisional = False
 
     async def correct_energy_values(self, data: LevitonData) -> None:
         """Detect and correct delta energy values from the REST API.
@@ -237,6 +240,59 @@ class EnergyTracker:
             LOGGER.debug("No stored baselines, snapshotting current values")
         snapshot_daily_baselines(data)
         await self._save_baselines(data)
+        self._baselines_provisional = True
+
+    async def validate_baselines(self, data: LevitonData) -> bool:
+        """Re-snapshot baselines if they were set from bandwidth-1 deltas.
+
+        On fresh startup with no lifetime cache, the initial REST fetch may
+        return bandwidth=1 period deltas instead of lifetime totals (the
+        1-second bandwidth reset delay isn't always sufficient). These tiny
+        values get snapshotted as baselines, causing daily energy to equal
+        the full lifetime.
+
+        This runs ~10s after startup, by which time WS has delivered correct
+        lifetime values. If any baseline is <10% of the current lifetime
+        (and lifetime > 1 kWh), we re-snapshot. Returns True if updated.
+        """
+        if not self._baselines_provisional:
+            return False
+        self._baselines_provisional = False
+
+        for breaker_id, breaker in data.breakers.items():
+            if breaker.energy_consumption is None:
+                continue
+            energy = breaker.energy_consumption
+            if breaker.poles == 2:
+                energy += breaker.energy_consumption_2 or 0
+            baseline = data.daily_baselines.get(breaker_id, 0)
+            if energy > 1.0 and baseline < energy * 0.1:
+                LOGGER.warning(
+                    "Baselines stale (bandwidth-1 deltas detected: "
+                    "breaker %s baseline=%.3f, lifetime=%.3f), re-snapshotting",
+                    breaker_id, baseline, energy,
+                )
+                snapshot_daily_baselines(data)
+                await self._save_baselines(data)
+                return True
+
+        for ct_id, ct in data.cts.items():
+            ct_total = (ct.energy_consumption or 0) + (
+                ct.energy_consumption_2 or 0
+            )
+            baseline = data.daily_baselines.get(f"ct_{ct_id}", 0)
+            if ct_total > 1.0 and baseline < ct_total * 0.1:
+                LOGGER.warning(
+                    "Baselines stale (bandwidth-1 deltas detected: "
+                    "CT %s baseline=%.3f, lifetime=%.3f), re-snapshotting",
+                    ct_id, baseline, ct_total,
+                )
+                snapshot_daily_baselines(data)
+                await self._save_baselines(data)
+                return True
+
+        LOGGER.debug("Baseline validation passed, no delta contamination")
+        return False
 
     async def save_lifetime_energy(self, data: LevitonData) -> None:
         """Persist current lifetime energy values for delta detection."""

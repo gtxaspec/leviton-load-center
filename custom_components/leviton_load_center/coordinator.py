@@ -21,7 +21,10 @@ from aioleviton import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_time_change,
+)
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -98,6 +101,19 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             self.hass, self._async_handle_midnight, hour=0, minute=0, second=0
         )
         self.config_entry.async_on_unload(self._midnight_unsub)
+        # Deferred baseline validation: on fresh startup the initial REST
+        # fetch may return bandwidth-1 deltas that get snapshotted as
+        # baselines.  After 10s the WS has delivered correct lifetime
+        # values, so we can detect and fix contaminated baselines.
+        if self.energy._baselines_provisional:
+            async_call_later(
+                self.hass, 10, self._async_validate_baselines
+            )
+
+    async def _async_validate_baselines(self, _now: Any = None) -> None:
+        """Re-snapshot baselines if initial values were bandwidth-1 deltas."""
+        if await self.energy.validate_baselines(self.data):
+            self.async_set_updated_data(self.data)
 
     async def _async_handle_midnight(self, _now: Any) -> None:
         """Reset daily energy baselines at midnight and persist."""
