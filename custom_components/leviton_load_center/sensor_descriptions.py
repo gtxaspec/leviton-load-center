@@ -487,6 +487,19 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
     ),
     LevitonBreakerSensorDescription(
+        key="lifetime_energy_import",
+        translation_key="lifetime_energy_import",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda b, _d, _o: round(
+            (b.energy_import or 0) + (b.energy_import_2 or 0), 3
+        ),
+        exists_fn=lambda b: (b.is_smart or b.has_lsbma)
+        and b.energy_import is not None,
+    ),
+    LevitonBreakerSensorDescription(
         key="breaker_status",
         translation_key="breaker_status",
         device_class=SensorDeviceClass.ENUM,

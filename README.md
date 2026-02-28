@@ -71,7 +71,7 @@ Supports both hub types and accessories:
 | Trip | Button | Gen 1 only (Gen 2 uses switch turn off) |
 | Identify LED | Switch | Blink the breaker's LED |
 | Connectivity | Binary sensor | BLE connection to hub |
-| Diagnostics | Sensors | Lifetime energy, amp rating, BLE RSSI, firmware versions, position, leg, poles, serial |
+| Diagnostics | Sensors | Lifetime energy, lifetime energy import, amp rating, BLE RSSI, firmware versions, position, leg, poles, serial |
 
 ### CT Clamp (LWHEM only)
 
@@ -185,7 +185,6 @@ This integration is designed to be a respectful consumer of the Leviton cloud AP
 ## Planned Features
 
 - Over-voltage / under-voltage binary sensors (API fields available on WHEMs and breakers)
-- Energy import sensors for breakers (tracked internally, useful for solar installations)
 - Energy history via cloud endpoints (`getAllEnergyConsumptionFor*` — alternative to lifetime delta calculation)
 
 ## Library
