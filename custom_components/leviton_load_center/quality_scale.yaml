@@ -8,7 +8,7 @@ rules:
   appropriate-polling: done
   brands:
     status: done
-    comment: PR home-assistant/brands#9761 submitted with icon, logo, and dark variants.
+    comment: Brand assets included in custom_components/leviton_load_center/brand/.
   common-modules: done
   config-flow: done
   config-flow-test-coverage: done
@@ -45,7 +45,7 @@ rules:
   reauthentication-flow: done
   test-coverage:
     status: done
-    comment: 264 tests, 97% overall coverage. All platform modules ≥94%.
+    comment: 282 tests, 97% overall coverage. All platform modules ≥94%.
 
   # Gold
   devices: done
