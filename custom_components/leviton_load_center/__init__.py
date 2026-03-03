@@ -17,7 +17,12 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers import device_registry as dr
 
 from .const import CONF_TOKEN, CONF_USER_ID, DOMAIN, LOGGER
-from .coordinator import LevitonConfigEntry, LevitonCoordinator, LevitonData, LevitonRuntimeData
+from .coordinator import (
+    LevitonConfigEntry,
+    LevitonCoordinator,
+    LevitonData,
+    LevitonRuntimeData,
+)
 from .entity import should_include_breaker
 
 PLATFORMS = [
@@ -28,9 +33,7 @@ PLATFORMS = [
 ]
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: LevitonConfigEntry
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: LevitonConfigEntry) -> bool:
     """Set up Leviton from a config entry."""
     session = async_get_clientsession(hass)
     client = LevitonClient(session)
@@ -74,9 +77,7 @@ async def async_setup_entry(
     coordinator = LevitonCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
 
-    entry.runtime_data = LevitonRuntimeData(
-        client=client, coordinator=coordinator
-    )
+    entry.runtime_data = LevitonRuntimeData(client=client, coordinator=coordinator)
 
     _cleanup_hidden_devices(hass, entry, coordinator.data)
 
@@ -105,17 +106,13 @@ def _cleanup_hidden_devices(
             device_reg.async_remove_device(device.id)
 
 
-async def _async_update_options(
-    hass: HomeAssistant, entry: LevitonConfigEntry
-) -> None:
+async def _async_update_options(hass: HomeAssistant, entry: LevitonConfigEntry) -> None:
     """Reload the integration when options change."""
     LOGGER.debug("Options changed, reloading integration")
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(
-    hass: HomeAssistant, entry: LevitonConfigEntry
-) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: LevitonConfigEntry) -> bool:
     """Unload a Leviton config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 

@@ -136,9 +136,7 @@ async def test_setup_creates_whem_connectivity() -> None:
     added_entities = []
     await async_setup_entry(MagicMock(), entry, added_entities.extend)
 
-    whem_sensors = [
-        e for e in added_entities if isinstance(e, LevitonWhemConnectivity)
-    ]
+    whem_sensors = [e for e in added_entities if isinstance(e, LevitonWhemConnectivity)]
     assert len(whem_sensors) == 1
     assert whem_sensors[0]._device_id == whem.id
 

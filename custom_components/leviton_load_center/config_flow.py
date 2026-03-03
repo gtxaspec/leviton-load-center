@@ -53,15 +53,14 @@ OPTIONS_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_VOLTAGE_208, default=DEFAULT_VOLTAGE_208): bool,
         vol.Optional(CONF_READ_ONLY, default=DEFAULT_READ_ONLY): bool,
-        vol.Optional(
-            CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT
-        ): bool,
+        vol.Optional(CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT): bool,
         vol.Optional(CONF_HIDE_DUMMY, default=DEFAULT_HIDE_DUMMY): bool,
-        vol.Optional(
-            CONF_STAGGER_DELAY, default=DEFAULT_STAGGER_DELAY
-        ): NumberSelector(
+        vol.Optional(CONF_STAGGER_DELAY, default=DEFAULT_STAGGER_DELAY): NumberSelector(
             NumberSelectorConfig(
-                min=1, max=10, step=1, mode=NumberSelectorMode.BOX,
+                min=1,
+                max=10,
+                step=1,
+                mode=NumberSelectorMode.BOX,
                 unit_of_measurement="s",
             )
         ),
@@ -115,9 +114,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         return errors
 
-    def _show_2fa_form(
-        self, step_id: str, errors: dict[str, str]
-    ) -> ConfigFlowResult:
+    def _show_2fa_form(self, step_id: str, errors: dict[str, str]) -> ConfigFlowResult:
         """Show the 2FA verification code form."""
         return self.async_show_form(
             step_id=step_id,
@@ -165,9 +162,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 self._client = client
-                await self.async_set_unique_id(
-                    self._email.lower().strip()
-                )
+                await self.async_set_unique_id(self._email.lower().strip())
                 self._abort_if_unique_id_configured()
                 return await self.async_step_options()
 
@@ -192,9 +187,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             errors = await self._async_try_2fa_login(user_input[CONF_CODE])
             if not errors:
-                await self.async_set_unique_id(
-                    self._email.lower().strip()
-                )
+                await self.async_set_unique_id(self._email.lower().strip())
                 self._abort_if_unique_id_configured()
                 return await self.async_step_options()
 
@@ -247,7 +240,9 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 LOGGER.warning("Connection failed during reauth: %s", err)
                 errors["base"] = "cannot_connect"
             except LevitonAuthError as err:
-                LOGGER.warning("Authentication failed during reauth for %s: %s", self._email, err)
+                LOGGER.warning(
+                    "Authentication failed during reauth for %s: %s", self._email, err
+                )
                 errors["base"] = "invalid_auth"
             except Exception:
                 LOGGER.exception("Unexpected error during reauth")
@@ -312,7 +307,9 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                 LOGGER.warning("Connection failed during reconfigure: %s", err)
                 errors["base"] = "cannot_connect"
             except LevitonAuthError as err:
-                LOGGER.warning("Authentication failed during reconfigure for %s: %s", email, err)
+                LOGGER.warning(
+                    "Authentication failed during reconfigure for %s: %s", email, err
+                )
                 errors["base"] = "invalid_auth"
             except Exception:
                 LOGGER.exception("Unexpected error during reconfigure")

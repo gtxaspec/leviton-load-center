@@ -27,7 +27,6 @@ from .const import (
 from .coordinator import LevitonConfigEntry
 from .entity import (
     LevitonBreakerControlEntity,
-    LevitonEntity,
     breaker_device_info,
     should_include_breaker,
 )

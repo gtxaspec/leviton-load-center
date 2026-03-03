@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import StateType
 
 from .const import LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
@@ -69,25 +70,19 @@ async def async_setup_entry(
             continue
         dev_info = ct_device_info(ct_id, data)
         for desc in CT_SENSORS:
-            entities.append(
-                LevitonCtSensor(coordinator, desc, ct_id, dev_info)
-            )
+            entities.append(LevitonCtSensor(coordinator, desc, ct_id, dev_info))
 
     # WHEM sensors
     for whem_id in data.whems:
         dev_info = whem_device_info(whem_id, data)
         for desc in WHEM_SENSORS:
-            entities.append(
-                LevitonWhemSensor(coordinator, desc, whem_id, dev_info)
-            )
+            entities.append(LevitonWhemSensor(coordinator, desc, whem_id, dev_info))
 
     # Panel sensors
     for panel_id in data.panels:
         dev_info = panel_device_info(panel_id, data)
         for desc in PANEL_SENSORS:
-            entities.append(
-                LevitonPanelSensor(coordinator, desc, panel_id, dev_info)
-            )
+            entities.append(LevitonPanelSensor(coordinator, desc, panel_id, dev_info))
 
     LOGGER.debug("Sensor platform: created %d entities", len(entities))
     async_add_entities(entities)
@@ -114,7 +109,7 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         self._options = options
 
     @property
-    def native_value(self) -> Any:
+    def native_value(self) -> StateType:
         """Return the sensor value."""
         breaker = self.coordinator.data.breakers.get(self._device_id)
         if breaker is None:
@@ -122,7 +117,10 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         value = self.entity_description.value_fn(
             breaker, self.coordinator.data, self._options
         )
-        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+        if (
+            value is not None
+            and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING
+        ):
             value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
         return value
 
@@ -134,13 +132,16 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
     _collection = "cts"
 
     @property
-    def native_value(self) -> Any:
+    def native_value(self) -> StateType:
         """Return the sensor value."""
         ct = self.coordinator.data.cts.get(self._device_id)
         if ct is None:
             return None
         value = self.entity_description.value_fn(ct, self.coordinator.data)
-        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+        if (
+            value is not None
+            and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING
+        ):
             value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
         return value
 
@@ -152,13 +153,16 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
     _collection = "whems"
 
     @property
-    def native_value(self) -> Any:
+    def native_value(self) -> StateType:
         """Return the sensor value."""
         whem = self.coordinator.data.whems.get(self._device_id)
         if whem is None:
             return None
         value = self.entity_description.value_fn(whem, self.coordinator.data)
-        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+        if (
+            value is not None
+            and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING
+        ):
             value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
         return value
 
@@ -170,12 +174,15 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
     _collection = "panels"
 
     @property
-    def native_value(self) -> Any:
+    def native_value(self) -> StateType:
         """Return the sensor value."""
         panel = self.coordinator.data.panels.get(self._device_id)
         if panel is None:
             return None
         value = self.entity_description.value_fn(panel, self.coordinator.data)
-        if value is not None and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING:
+        if (
+            value is not None
+            and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING
+        ):
             value = self.coordinator.clamp_increasing(self._attr_unique_id, value)
         return value

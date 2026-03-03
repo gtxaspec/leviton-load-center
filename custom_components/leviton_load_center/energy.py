@@ -78,16 +78,12 @@ def _normalize_energy(
                 del ws_data[ws_key]
 
 
-def normalize_breaker_energy(
-    breaker_data: dict[str, Any], breaker: Breaker
-) -> None:
+def normalize_breaker_energy(breaker_data: dict[str, Any], breaker: Breaker) -> None:
     """Normalize WS breaker energy: accept lifetimes, discard deltas."""
     _normalize_energy(breaker_data, breaker, _BREAKER_ENERGY_FIELDS)
 
 
-def normalize_ct_energy(
-    ct_data: dict[str, Any], ct: Ct
-) -> None:
+def normalize_ct_energy(ct_data: dict[str, Any], ct: Ct) -> None:
     """Normalize WS CT energy: accept lifetimes, discard deltas."""
     _normalize_energy(ct_data, ct, _CT_ENERGY_FIELDS)
 
@@ -115,9 +111,7 @@ def snapshot_daily_baselines(data: LevitonData) -> None:
                 energy += breaker.energy_consumption_2 or 0
             data.daily_baselines[breaker_id] = round(energy, 3)
     for ct_id, ct in data.cts.items():
-        ct_total = (ct.energy_consumption or 0) + (
-            ct.energy_consumption_2 or 0
-        )
+        ct_total = (ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0)
         data.daily_baselines[f"ct_{ct_id}"] = round(ct_total, 3)
 
 
@@ -139,10 +133,13 @@ def _correct_device_energy(
         if cached_val is not None and rest_val < cached_val * 0.5:
             corrected = round(cached_val + rest_val, 3)
             LOGGER.debug(
-                "Energy correction %s%s/%s: REST=%s (delta), "
-                "cached=%s, corrected=%s",
-                key_prefix, getattr(device, "name", device_id),
-                attr, rest_val, cached_val, corrected,
+                "Energy correction %s%s/%s: REST=%s (delta), cached=%s, corrected=%s",
+                key_prefix,
+                getattr(device, "name", device_id),
+                attr,
+                rest_val,
+                cached_val,
+                corrected,
             )
             setattr(device, attr, corrected)
             stored[cache_key] = corrected
@@ -179,7 +176,12 @@ class EnergyTracker:
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.lifetime_energy"
         )
         self._energy_high_water: dict[str, float] = {}
-        self._baselines_provisional = False
+        self._baselines_provisional: bool = False
+
+    @property
+    def baselines_provisional(self) -> bool:
+        """Return whether baselines may be contaminated by bandwidth-1 deltas."""
+        return self._baselines_provisional
 
     async def correct_energy_values(self, data: LevitonData) -> None:
         """Detect and correct delta energy values from the REST API.
@@ -210,10 +212,12 @@ class EnergyTracker:
 
     async def _save_baselines(self, data: LevitonData) -> None:
         """Persist daily baselines with today's date."""
-        await self._baseline_store.async_save({
-            "date": dt_util.now().date().isoformat(),
-            "baselines": dict(data.daily_baselines),
-        })
+        await self._baseline_store.async_save(
+            {
+                "date": dt_util.now().date().isoformat(),
+                "baselines": dict(data.daily_baselines),
+            }
+        )
 
     async def load_daily_baselines(self, data: LevitonData) -> None:
         """Load daily baselines from storage, or snapshot current values.
@@ -228,13 +232,12 @@ class EnergyTracker:
             baselines = stored.get("baselines", {})
             if stored_date == today:
                 data.daily_baselines = baselines
-                LOGGER.debug(
-                    "Loaded %d daily baselines from storage", len(baselines)
-                )
+                LOGGER.debug("Loaded %d daily baselines from storage", len(baselines))
                 return
             LOGGER.debug(
                 "Stored baselines are from %s, re-snapshotting for %s",
-                stored_date, today,
+                stored_date,
+                today,
             )
         else:
             LOGGER.debug("No stored baselines, snapshotting current values")
@@ -270,22 +273,24 @@ class EnergyTracker:
                 LOGGER.warning(
                     "Baselines stale (bandwidth-1 deltas detected: "
                     "breaker %s baseline=%.3f, lifetime=%.3f), re-snapshotting",
-                    breaker_id, baseline, energy,
+                    breaker_id,
+                    baseline,
+                    energy,
                 )
                 snapshot_daily_baselines(data)
                 await self._save_baselines(data)
                 return True
 
         for ct_id, ct in data.cts.items():
-            ct_total = (ct.energy_consumption or 0) + (
-                ct.energy_consumption_2 or 0
-            )
+            ct_total = (ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0)
             baseline = data.daily_baselines.get(f"ct_{ct_id}", 0)
             if ct_total > 1.0 and baseline < ct_total * 0.1:
                 LOGGER.warning(
                     "Baselines stale (bandwidth-1 deltas detected: "
                     "CT %s baseline=%.3f, lifetime=%.3f), re-snapshotting",
-                    ct_id, baseline, ct_total,
+                    ct_id,
+                    baseline,
+                    ct_total,
                 )
                 snapshot_daily_baselines(data)
                 await self._save_baselines(data)
@@ -298,7 +303,9 @@ class EnergyTracker:
         """Persist current lifetime energy values for delta detection."""
         stored: dict[str, float] = {}
         for breaker_id, breaker in data.breakers.items():
-            _collect_device_energy(breaker_id, breaker, stored, _BREAKER_CACHE_FIELDS, "")
+            _collect_device_energy(
+                breaker_id, breaker, stored, _BREAKER_CACHE_FIELDS, ""
+            )
         for ct_id, ct in data.cts.items():
             _collect_device_energy(ct_id, ct, stored, _CT_CACHE_FIELDS, "ct_")
         await self._lifetime_store.async_save(stored)
@@ -320,9 +327,7 @@ class EnergyTracker:
         """
         prev = self._energy_high_water.get(key)
         if prev is not None and value < prev:
-            LOGGER.debug(
-                "Clamped decreasing energy %s: %s -> %s", key, value, prev
-            )
+            LOGGER.debug("Clamped decreasing energy %s: %s -> %s", key, value, prev)
             return prev
         self._energy_high_water[key] = value
         return value

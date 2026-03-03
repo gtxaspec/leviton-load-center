@@ -5,7 +5,6 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from aioleviton import (
     LevitonAuthError,
@@ -19,11 +18,14 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant.components.leviton_load_center import _cleanup_hidden_devices
-from homeassistant.components.leviton_load_center.const import CONF_TOKEN, CONF_USER_ID, DOMAIN
+from homeassistant.components.leviton_load_center.const import (
+    CONF_TOKEN,
+    CONF_USER_ID,
+    DOMAIN,
+)
 from homeassistant.components.leviton_load_center.coordinator import LevitonData
 
 from .conftest import (
-    MOCK_AUTH_TOKEN,
     MOCK_BREAKER_GEN1,
     MOCK_BREAKER_GEN2,
     MOCK_EMAIL,
@@ -82,9 +84,7 @@ async def test_setup_entry_token_and_login_both_fail(
             side_effect=LevitonAuthError("Token expired")
         )
         # Fallback login also fails
-        client.login = AsyncMock(
-            side_effect=LevitonAuthError("Bad password")
-        )
+        client.login = AsyncMock(side_effect=LevitonAuthError("Bad password"))
 
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -208,9 +208,7 @@ async def test_setup_entry_token_restore_auth_failure_falls_back(
             raise LevitonAuthError("Token expired")
         return original_return
 
-    mock_client.get_permissions = AsyncMock(
-        side_effect=_get_permissions_side_effect
-    )
+    mock_client.get_permissions = AsyncMock(side_effect=_get_permissions_side_effect)
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -318,9 +316,7 @@ def test_cleanup_removes_excluded_breaker(hass) -> None:
     mock_device = MagicMock()
     mock_device.id = "device_registry_id"
 
-    with patch(
-        "homeassistant.components.leviton_load_center.dr.async_get"
-    ) as mock_dr:
+    with patch("homeassistant.components.leviton_load_center.dr.async_get") as mock_dr:
         device_reg = MagicMock()
         device_reg.async_get_device = MagicMock(return_value=mock_device)
         device_reg.async_remove_device = MagicMock()
@@ -344,15 +340,37 @@ def test_cleanup_keeps_included_breaker(hass) -> None:
     entry = MagicMock()
     entry.options = {"hide_dummy": True}
 
-    with patch(
-        "homeassistant.components.leviton_load_center.dr.async_get"
-    ) as mock_dr:
+    with patch("homeassistant.components.leviton_load_center.dr.async_get") as mock_dr:
         device_reg = MagicMock()
         mock_dr.return_value = device_reg
 
         _cleanup_hidden_devices(hass, entry, data)
 
         device_reg.async_remove_device.assert_not_called()
+
+
+async def test_remove_config_entry_device_rejects_active(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_websocket: MagicMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test removing an active device is rejected."""
+    from homeassistant.components.leviton_load_center import (
+        async_remove_config_entry_device,
+    )
+
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Create a device entry with an identifier matching an active WHEM
+    device_entry = MagicMock()
+    device_entry.identifiers = {(DOMAIN, MOCK_WHEM.id)}
+
+    result = await async_remove_config_entry_device(
+        hass, mock_config_entry, device_entry
+    )
+    assert result is False
 
 
 def test_cleanup_handles_missing_device(hass) -> None:
@@ -367,9 +385,7 @@ def test_cleanup_handles_missing_device(hass) -> None:
     entry = MagicMock()
     entry.options = {"hide_dummy": True}
 
-    with patch(
-        "homeassistant.components.leviton_load_center.dr.async_get"
-    ) as mock_dr:
+    with patch("homeassistant.components.leviton_load_center.dr.async_get") as mock_dr:
         device_reg = MagicMock()
         device_reg.async_get_device = MagicMock(return_value=None)
         mock_dr.return_value = device_reg

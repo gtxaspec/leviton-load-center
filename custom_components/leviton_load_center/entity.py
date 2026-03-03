@@ -58,9 +58,7 @@ class LevitonEntity(CoordinatorEntity[LevitonCoordinator]):
                     if whem is not None and not whem.connected:
                         return False
                 elif breaker.residential_breaker_panel_id:
-                    panel = data.panels.get(
-                        breaker.residential_breaker_panel_id
-                    )
+                    panel = data.panels.get(breaker.residential_breaker_panel_id)
                     if panel is not None and not panel.is_online:
                         return False
         return True
@@ -125,7 +123,9 @@ def breaker_device_info(breaker_id: str, data: LevitonData) -> DeviceInfo:
         identifiers={(DOMAIN, breaker_id)},
         name=name,
         manufacturer="Leviton",
-        model="Basic Breaker" if breaker.model in ("NONE", "NONE-1", "NONE-2") else breaker.model,
+        model="Basic Breaker"
+        if breaker.model in ("NONE", "NONE-1", "NONE-2")
+        else breaker.model,
         sw_version=breaker.firmware_version_ble,
         hw_version=breaker.hw_version,
         serial_number=breaker.serial_number,

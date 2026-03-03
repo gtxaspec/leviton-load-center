@@ -84,9 +84,7 @@ class WebSocketManager:
         self._ws_remove_notification = self.ws.on_notification(
             self._handle_ws_notification
         )
-        self._ws_remove_disconnect = self.ws.on_disconnect(
-            self._handle_ws_disconnect
-        )
+        self._ws_remove_disconnect = self.ws.on_disconnect(self._handle_ws_disconnect)
 
         data = coordinator.data
 
@@ -134,9 +132,7 @@ class WebSocketManager:
                 try:
                     await self.ws.subscribe("ResidentialBreaker", breaker_id)
                 except LevitonConnectionError:
-                    LOGGER.warning(
-                        "Failed to subscribe to breaker %s", breaker_id
-                    )
+                    LOGGER.warning("Failed to subscribe to breaker %s", breaker_id)
 
         # Bandwidth is set once on connect (above). The WHEM auto-reverts
         # from 1 to 2 within seconds, and 2 is sufficient for real-time push.
@@ -164,22 +160,14 @@ class WebSocketManager:
             return
         for panel_id in coordinator.data.panels:
             try:
-                await coordinator.client.set_panel_bandwidth(
-                    panel_id, enabled=False
-                )
+                await coordinator.client.set_panel_bandwidth(panel_id, enabled=False)
             except LevitonConnectionError:
-                LOGGER.debug(
-                    "Failed to disable bandwidth for panel %s", panel_id
-                )
+                LOGGER.debug("Failed to disable bandwidth for panel %s", panel_id)
         for whem_id in coordinator.data.whems:
             try:
-                await coordinator.client.set_whem_bandwidth(
-                    whem_id, bandwidth=0
-                )
+                await coordinator.client.set_whem_bandwidth(whem_id, bandwidth=0)
             except LevitonConnectionError:
-                LOGGER.debug(
-                    "Failed to disable bandwidth for WHEM %s", whem_id
-                )
+                LOGGER.debug("Failed to disable bandwidth for WHEM %s", whem_id)
 
         # Disconnect WebSocket
         if self.ws:
@@ -243,6 +231,8 @@ class WebSocketManager:
         if self._ws_remove_disconnect:
             self._ws_remove_disconnect()
         self._ws_remove_disconnect = None
+        if self._ws_remove_notification:
+            self._ws_remove_notification()
         self._ws_remove_notification = None
         await self.ws.disconnect()
         self.ws = None
@@ -255,14 +245,14 @@ class WebSocketManager:
         silence = time.monotonic() - self._last_ws_notification
         if silence < 90:
             return
-        LOGGER.warning(
-            "WS silent for %d seconds, forcing reconnect", int(silence)
-        )
+        LOGGER.warning("WS silent for %d seconds, forcing reconnect", int(silence))
         # Remove disconnect callback before disconnecting to prevent
         # _handle_ws_disconnect from also triggering a reconnect.
         if self._ws_remove_disconnect:
             self._ws_remove_disconnect()
         self._ws_remove_disconnect = None
+        if self._ws_remove_notification:
+            self._ws_remove_notification()
         self._ws_remove_notification = None
         await self.ws.disconnect()
         self.ws = None
@@ -290,13 +280,9 @@ class WebSocketManager:
                 await client.set_whem_bandwidth(whem_id, bandwidth=0)
                 await client.set_whem_bandwidth(whem_id, bandwidth=1)
             except LevitonConnectionError:
-                LOGGER.warning(
-                    "Bandwidth keepalive failed for WHEM %s", whem_id
-                )
+                LOGGER.warning("Bandwidth keepalive failed for WHEM %s", whem_id)
 
-    def _apply_breaker_ws_update(
-        self, breaker_data: dict[str, Any]
-    ) -> bool:
+    def _apply_breaker_ws_update(self, breaker_data: dict[str, Any]) -> bool:
         """Apply a single breaker update from a WS notification.
 
         Accumulates energy deltas and synthesizes currentState for Gen 1 trips.
@@ -347,9 +333,7 @@ class WebSocketManager:
                     if ct_id is not None:
                         ct_key = str(ct_id)
                         if ct_key in coordinator_data.cts:
-                            normalize_ct_energy(
-                                ct_data, coordinator_data.cts[ct_key]
-                            )
+                            normalize_ct_energy(ct_data, coordinator_data.cts[ct_key])
                             coordinator_data.cts[ct_key].update(ct_data)
                             ct_ids.append(ct_key)
 
@@ -372,9 +356,7 @@ class WebSocketManager:
 
             # Panel own property updates
             panel_data = {
-                k: v
-                for k, v in data_payload.items()
-                if k != "ResidentialBreaker"
+                k: v for k, v in data_payload.items() if k != "ResidentialBreaker"
             }
             if panel_data and str(model_id) in coordinator_data.panels:
                 coordinator_data.panels[str(model_id)].update(panel_data)
@@ -389,26 +371,29 @@ class WebSocketManager:
         elif model_name == "IotCt":
             ct_key = str(model_id)
             if ct_key in coordinator_data.cts:
-                normalize_ct_energy(
-                    data_payload, coordinator_data.cts[ct_key]
-                )
+                normalize_ct_energy(data_payload, coordinator_data.cts[ct_key])
                 coordinator_data.cts[ct_key].update(data_payload)
                 ct_ids.append(ct_key)
 
         else:
             LOGGER.debug(
                 "WS notification ignored: unknown model %s/%s",
-                model_name, model_id,
+                model_name,
+                model_id,
             )
             return
 
         if breaker_ids or ct_ids or hub_updated:
             parts = [f"{model_name} {model_id}"]
             if hub_updated:
-                parts.append("hub(%s)" % ", ".join(
-                    k for k in data_payload
-                    if k not in ("ResidentialBreaker", "IotCt")
-                ))
+                parts.append(
+                    "hub(%s)"
+                    % ", ".join(
+                        k
+                        for k in data_payload
+                        if k not in ("ResidentialBreaker", "IotCt")
+                    )
+                )
             if breaker_ids:
                 parts.append("breakers(%s)" % " ".join(breaker_ids))
             if ct_ids:
@@ -453,12 +438,8 @@ class WebSocketManager:
                 try:
                     await coordinator.client.get_permissions()
                 except LevitonAuthError as err:
-                    LOGGER.warning(
-                        "Token expired during reconnection: %s", err
-                    )
-                    coordinator.config_entry.async_start_reauth(
-                        coordinator.hass
-                    )
+                    LOGGER.warning("Token expired during reconnection: %s", err)
+                    coordinator.config_entry.async_start_reauth(coordinator.hass)
                     return
                 except LevitonConnectionError:
                     LOGGER.debug(

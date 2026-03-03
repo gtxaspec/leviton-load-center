@@ -11,7 +11,10 @@ from aioleviton import LevitonConnectionError
 
 from homeassistant.exceptions import HomeAssistantError
 
-from homeassistant.components.leviton_load_center.coordinator import LevitonData, LevitonRuntimeData
+from homeassistant.components.leviton_load_center.coordinator import (
+    LevitonData,
+    LevitonRuntimeData,
+)
 from homeassistant.components.leviton_load_center.entity import breaker_device_info
 from homeassistant.components.leviton_load_center.switch import (
     BREAKER_SWITCH_DESCRIPTION,
@@ -99,7 +102,9 @@ def test_is_on_manual_off() -> None:
     assert switch.is_on is False
 
 
-@pytest.mark.parametrize("state", ["NotCommunicating", "CommunicationFailure", "COMMUNICATING"])
+@pytest.mark.parametrize(
+    "state", ["NotCommunicating", "CommunicationFailure", "COMMUNICATING"]
+)
 def test_is_on_communication_states(state) -> None:
     """Test switch stays on during communication state changes."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
@@ -113,9 +118,15 @@ def test_is_on_communication_states(state) -> None:
     assert switch.is_on is True
 
 
-@pytest.mark.parametrize("state", [
-    "GFCIFault", "SoftwareTrip", "OverloadTrip", "ShortCircuitTrip",
-])
+@pytest.mark.parametrize(
+    "state",
+    [
+        "GFCIFault",
+        "SoftwareTrip",
+        "OverloadTrip",
+        "ShortCircuitTrip",
+    ],
+)
 def test_is_on_trip_states(state) -> None:
     """Test switch shows off for trip/fault states."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)
@@ -268,8 +279,12 @@ async def test_setup_creates_switches_for_gen2_and_identify() -> None:
     added_entities = []
     await async_setup_entry(MagicMock(), entry, added_entities.extend)
 
-    breaker_switches = [e for e in added_entities if isinstance(e, LevitonBreakerSwitch)]
-    identify_switches = [e for e in added_entities if isinstance(e, LevitonBreakerIdentifySwitch)]
+    breaker_switches = [
+        e for e in added_entities if isinstance(e, LevitonBreakerSwitch)
+    ]
+    identify_switches = [
+        e for e in added_entities if isinstance(e, LevitonBreakerIdentifySwitch)
+    ]
     # Gen 2 only gets breaker switch
     assert len(breaker_switches) == 1
     assert breaker_switches[0]._device_id == gen2.id
@@ -311,7 +326,6 @@ async def test_turn_on_error_raises_ha_error(mock_client) -> None:
     )
     switch = _make_switch(breaker, data, mock_client)
 
-
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_on()
 
@@ -327,7 +341,6 @@ async def test_turn_off_error_raises_ha_error(mock_client) -> None:
         side_effect=LevitonConnectionError("Connection lost")
     )
     switch = _make_switch(breaker, data, mock_client)
-
 
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_off()
@@ -345,7 +358,6 @@ async def test_identify_on_error_raises_ha_error(mock_client) -> None:
     )
     switch = _make_identify_switch(breaker, data, mock_client)
 
-
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_on()
 
@@ -361,7 +373,6 @@ async def test_identify_off_error_raises_ha_error(mock_client) -> None:
         side_effect=LevitonConnectionError("Connection lost")
     )
     switch = _make_identify_switch(breaker, data, mock_client)
-
 
     with pytest.raises(HomeAssistantError):
         await switch.async_turn_off()

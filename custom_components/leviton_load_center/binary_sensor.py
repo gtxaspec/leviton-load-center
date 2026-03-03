@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import LOGGER
-from .coordinator import LevitonConfigEntry, LevitonCoordinator
+from .coordinator import LevitonConfigEntry
 from .entity import LevitonEntity, panel_device_info, whem_device_info
 
 PARALLEL_UPDATES = 0

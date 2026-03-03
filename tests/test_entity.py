@@ -290,9 +290,14 @@ def test_entity_available_breaker_panel_offline() -> None:
 # --- LevitonBreakerControlEntity available tests ---
 
 
-@pytest.mark.parametrize("state", [
-    "NotCommunicating", "CommunicationFailure", "UNDEFINED",
-])
+@pytest.mark.parametrize(
+    "state",
+    [
+        "NotCommunicating",
+        "CommunicationFailure",
+        "UNDEFINED",
+    ],
+)
 def test_control_entity_unavailable_offline_states(state) -> None:
     """Test control entity is unavailable when breaker is in offline state."""
     breaker = deepcopy(MOCK_BREAKER_GEN2)

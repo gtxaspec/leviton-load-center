@@ -105,10 +105,8 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         # fetch may return bandwidth-1 deltas that get snapshotted as
         # baselines.  After 10s the WS has delivered correct lifetime
         # values, so we can detect and fix contaminated baselines.
-        if self.energy._baselines_provisional:
-            async_call_later(
-                self.hass, 10, self._async_validate_baselines
-            )
+        if self.energy.baselines_provisional:
+            async_call_later(self.hass, 10, self._async_validate_baselines)
 
     async def _async_validate_baselines(self, _now: Any = None) -> None:
         """Re-snapshot baselines if initial values were bandwidth-1 deltas."""
@@ -160,7 +158,9 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self.data = LevitonData(residences=residences)
 
         LOGGER.debug(
-            "Discovered %d residences: %s", len(self._residence_ids), self._residence_ids
+            "Discovered %d residences: %s",
+            len(self._residence_ids),
+            self._residence_ids,
         )
 
         # Discover hubs and their children in each residence
@@ -176,9 +176,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
             whems = await self.client.get_whems(residence_id)
             LOGGER.debug("Found %d WHEMs in residence %s", len(whems), residence_id)
             for whem in whems:
-                LOGGER.debug(
-                    "  WHEM %s: %s (FW %s)", whem.id, whem.name, whem.version
-                )
+                LOGGER.debug("  WHEM %s: %s (FW %s)", whem.id, whem.name, whem.version)
                 self.data.whems[whem.id] = whem
                 # REQUIRED DELAY: The WHEM firmware switches energy reporting
                 # mode based on bandwidth state. bandwidth=1 makes the API
@@ -193,9 +191,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     await self.client.set_whem_bandwidth(whem.id, bandwidth=0)
                     await asyncio.sleep(1)
                 except LevitonConnectionError:
-                    LOGGER.debug(
-                        "Failed to reset bandwidth for WHEM %s", whem.id
-                    )
+                    LOGGER.debug("Failed to reset bandwidth for WHEM %s", whem.id)
                 # Get breakers for this WHEM
                 try:
                     breakers = await self.client.get_whem_breakers(whem.id)
@@ -203,16 +199,16 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                         self.data.breakers[breaker.id] = breaker
                         LOGGER.debug(
                             "    Breaker %s: %s (pos %d, serial %s)",
-                            breaker.id, breaker.name, breaker.position,
+                            breaker.id,
+                            breaker.name,
+                            breaker.position,
                             breaker.serial_number,
                         )
                     LOGGER.debug(
                         "  Found %d breakers for WHEM %s", len(breakers), whem.id
                     )
                 except LevitonConnectionError:
-                    LOGGER.warning(
-                        "Failed to fetch breakers for WHEM %s", whem.id
-                    )
+                    LOGGER.warning("Failed to fetch breakers for WHEM %s", whem.id)
                 # Get CTs for this WHEM
                 try:
                     cts = await self.client.get_cts(whem.id)
@@ -220,44 +216,36 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                         self.data.cts[str(ct.id)] = ct
                         LOGGER.debug(
                             "    CT %s: %s (ch %d)",
-                            ct.id, ct.name, ct.channel,
+                            ct.id,
+                            ct.name,
+                            ct.channel,
                         )
-                    LOGGER.debug(
-                        "  Found %d CTs for WHEM %s", len(cts), whem.id
-                    )
+                    LOGGER.debug("  Found %d CTs for WHEM %s", len(cts), whem.id)
                 except LevitonConnectionError:
-                    LOGGER.warning(
-                        "Failed to fetch CTs for WHEM %s", whem.id
-                    )
+                    LOGGER.warning("Failed to fetch CTs for WHEM %s", whem.id)
         except LevitonConnectionError:
-            LOGGER.warning(
-                "Failed to fetch WHEMs for residence %s", residence_id
-            )
+            LOGGER.warning("Failed to fetch WHEMs for residence %s", residence_id)
 
         # DAU panels
         try:
             panels = await self.client.get_panels(residence_id)
-            LOGGER.debug(
-                "Found %d LDATAs in residence %s", len(panels), residence_id
-            )
+            LOGGER.debug("Found %d LDATAs in residence %s", len(panels), residence_id)
             for panel in panels:
                 LOGGER.debug(
                     "  LDATA %s: %s (FW %s)",
-                    panel.id, panel.name, panel.package_ver,
+                    panel.id,
+                    panel.name,
+                    panel.package_ver,
                 )
                 self.data.panels[panel.id] = panel
                 # REQUIRED DELAY: Same as WHEM above — the LDATA firmware
                 # needs time to apply the bandwidth change before the next
                 # REST call returns correct lifetime energy values.
                 try:
-                    await self.client.set_panel_bandwidth(
-                        panel.id, enabled=False
-                    )
+                    await self.client.set_panel_bandwidth(panel.id, enabled=False)
                     await asyncio.sleep(1)
                 except LevitonConnectionError:
-                    LOGGER.debug(
-                        "Failed to reset bandwidth for panel %s", panel.id
-                    )
+                    LOGGER.debug("Failed to reset bandwidth for panel %s", panel.id)
                 # Get breakers for this panel
                 try:
                     breakers = await self.client.get_panel_breakers(panel.id)
@@ -265,21 +253,20 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                         self.data.breakers[breaker.id] = breaker
                         LOGGER.debug(
                             "    Breaker %s: %s (pos %d, serial %s)",
-                            breaker.id, breaker.name, breaker.position,
+                            breaker.id,
+                            breaker.name,
+                            breaker.position,
                             breaker.serial_number,
                         )
                     LOGGER.debug(
                         "  Found %d breakers for LDATA %s",
-                        len(breakers), panel.id,
+                        len(breakers),
+                        panel.id,
                     )
                 except LevitonConnectionError:
-                    LOGGER.warning(
-                        "Failed to fetch breakers for panel %s", panel.id
-                    )
+                    LOGGER.warning("Failed to fetch breakers for panel %s", panel.id)
         except LevitonConnectionError:
-            LOGGER.warning(
-                "Failed to fetch panels for residence %s", residence_id
-            )
+            LOGGER.warning("Failed to fetch panels for residence %s", residence_id)
 
     @callback
     def _check_firmware_updates(self) -> None:
@@ -355,9 +342,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     # stale deltas from a previous bandwidth=1 session get
                     # re-added on every poll cycle, inflating energy readings.
                     try:
-                        await self.client.set_whem_bandwidth(
-                            whem_id, bandwidth=0
-                        )
+                        await self.client.set_whem_bandwidth(whem_id, bandwidth=0)
                         await asyncio.sleep(1)
                     except LevitonConnectionError:
                         pass
@@ -379,9 +364,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                     # Reset bandwidth when WS is down so REST returns lifetime
                     # energy values instead of stale period deltas.
                     try:
-                        await self.client.set_panel_bandwidth(
-                            panel_id, enabled=False
-                        )
+                        await self.client.set_panel_bandwidth(panel_id, enabled=False)
                         await asyncio.sleep(1)
                     except LevitonConnectionError:
                         pass

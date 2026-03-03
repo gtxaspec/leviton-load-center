@@ -197,6 +197,7 @@ class LevitonWhemAllOffButton(LevitonEntity, ButtonEntity):
             if b.iot_whem_id == self._device_id and b.is_smart
         ]
         LOGGER.debug("All Off for WHEM %s: %d breakers", self._device_id, len(children))
+        errors: list[str] = []
         for i, (breaker_id, breaker) in enumerate(children):
             if i > 0:
                 await asyncio.sleep(delay)
@@ -208,15 +209,18 @@ class LevitonWhemAllOffButton(LevitonEntity, ButtonEntity):
                     await self.coordinator.client.trip_breaker(breaker_id)
                     breaker.current_state = STATE_SOFTWARE_TRIP
             except LevitonConnectionError as err:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="bulk_control_failed",
-                    translation_placeholders={
-                        "name": breaker_id,
-                        "error": str(err),
-                    },
-                ) from err
+                LOGGER.warning("All Off: breaker %s failed: %s", breaker_id, err)
+                errors.append(f"{breaker_id}: {err}")
         self.coordinator.async_set_updated_data(self.coordinator.data)
+        if errors:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="bulk_control_failed",
+                translation_placeholders={
+                    "name": ", ".join(errors),
+                    "error": f"{len(errors)} breaker(s) failed",
+                },
+            )
 
 
 class LevitonWhemAllOnButton(LevitonEntity, ButtonEntity):
@@ -232,11 +236,10 @@ class LevitonWhemAllOnButton(LevitonEntity, ButtonEntity):
         children = [
             (bid, b)
             for bid, b in self.coordinator.data.breakers.items()
-            if b.iot_whem_id == self._device_id
-            and b.is_smart
-            and b.can_remote_on
+            if b.iot_whem_id == self._device_id and b.is_smart and b.can_remote_on
         ]
         LOGGER.debug("All On for WHEM %s: %d breakers", self._device_id, len(children))
+        errors: list[str] = []
         for i, (breaker_id, breaker) in enumerate(children):
             if i > 0:
                 await asyncio.sleep(delay)
@@ -244,15 +247,18 @@ class LevitonWhemAllOnButton(LevitonEntity, ButtonEntity):
                 await self.coordinator.client.turn_on_breaker(breaker_id)
                 breaker.remote_state = STATE_REMOTE_ON
             except LevitonConnectionError as err:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="bulk_control_failed",
-                    translation_placeholders={
-                        "name": breaker_id,
-                        "error": str(err),
-                    },
-                ) from err
+                LOGGER.warning("All On: breaker %s failed: %s", breaker_id, err)
+                errors.append(f"{breaker_id}: {err}")
         self.coordinator.async_set_updated_data(self.coordinator.data)
+        if errors:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="bulk_control_failed",
+                translation_placeholders={
+                    "name": ", ".join(errors),
+                    "error": f"{len(errors)} breaker(s) failed",
+                },
+            )
 
 
 class LevitonPanelTripAllButton(LevitonEntity, ButtonEntity):
@@ -273,6 +279,7 @@ class LevitonPanelTripAllButton(LevitonEntity, ButtonEntity):
         LOGGER.debug(
             "Trip All for panel %s: %d breakers", self._device_id, len(children)
         )
+        errors: list[str] = []
         for i, (breaker_id, breaker) in enumerate(children):
             if i > 0:
                 await asyncio.sleep(delay)
@@ -280,12 +287,15 @@ class LevitonPanelTripAllButton(LevitonEntity, ButtonEntity):
                 await self.coordinator.client.trip_breaker(breaker_id)
                 breaker.current_state = STATE_SOFTWARE_TRIP
             except LevitonConnectionError as err:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="bulk_control_failed",
-                    translation_placeholders={
-                        "name": breaker_id,
-                        "error": str(err),
-                    },
-                ) from err
+                LOGGER.warning("Trip All: breaker %s failed: %s", breaker_id, err)
+                errors.append(f"{breaker_id}: {err}")
         self.coordinator.async_set_updated_data(self.coordinator.data)
+        if errors:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="bulk_control_failed",
+                translation_placeholders={
+                    "name": ", ".join(errors),
+                    "error": f"{len(errors)} breaker(s) failed",
+                },
+            )

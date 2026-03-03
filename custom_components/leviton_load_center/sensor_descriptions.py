@@ -248,9 +248,7 @@ def _whem_total_energy(whem: Whem, data: LevitonData) -> float | None:
     found = False
     for ct in data.cts.values():
         if ct.iot_whem_id == whem.id:
-            total += (ct.energy_consumption or 0) + (
-                ct.energy_consumption_2 or 0
-            )
+            total += (ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0)
             found = True
     if found:
         return round(total, 3)
@@ -267,9 +265,7 @@ def _whem_daily_energy(whem: Whem, data: LevitonData) -> float | None:
     found = False
     for ct in data.cts.values():
         if ct.iot_whem_id == whem.id:
-            ct_total = (ct.energy_consumption or 0) + (
-                ct.energy_consumption_2 or 0
-            )
+            ct_total = (ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0)
             baseline = data.daily_baselines.get(f"ct_{ct.id}")
             if baseline is not None:
                 daily = ct_total - baseline
@@ -299,19 +295,25 @@ def _whem_frequency(whem: Whem, data: LevitonData) -> float | None:
 
 
 def _whem_leg_power(whem: Whem, data: LevitonData, leg: int) -> int | None:
-    """Get CT power for a specific leg."""
+    """Sum CT power for a specific leg across all CTs on a WHEM."""
+    total = 0
+    found = False
     for ct in data.cts.values():
         if ct.iot_whem_id == whem.id:
-            return ct.active_power if leg == 1 else ct.active_power_2
-    return None
+            total += (ct.active_power or 0) if leg == 1 else (ct.active_power_2 or 0)
+            found = True
+    return total if found else None
 
 
 def _whem_leg_current(whem: Whem, data: LevitonData, leg: int) -> int | None:
-    """Get CT current for a specific leg."""
+    """Sum CT current for a specific leg across all CTs on a WHEM."""
+    total = 0
+    found = False
     for ct in data.cts.values():
         if ct.iot_whem_id == whem.id:
-            return ct.rms_current if leg == 1 else ct.rms_current_2
-    return None
+            total += (ct.rms_current or 0) if leg == 1 else (ct.rms_current_2 or 0)
+            found = True
+    return total if found else None
 
 
 def _panel_voltage(panel: Panel, data: LevitonData) -> float | None:
@@ -363,9 +365,7 @@ def _panel_daily_energy(panel: Panel, data: LevitonData) -> float | None:
     found = False
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id == panel.id:
-            daily = calc_daily_energy(
-                breaker.id, _breaker_energy(breaker), data
-            )
+            daily = calc_daily_energy(breaker.id, _breaker_energy(breaker), data)
             if daily is not None:
                 total += daily
                 found = True
@@ -395,9 +395,7 @@ def _panel_leg_power(panel: Panel, data: LevitonData, leg: int) -> int | None:
     return total if found else None
 
 
-def _panel_leg_current(
-    panel: Panel, data: LevitonData, leg: int
-) -> int | None:
+def _panel_leg_current(panel: Panel, data: LevitonData, leg: int) -> int | None:
     """Sum breaker current for a specific leg of a DAU panel."""
     total = 0
     found = False
@@ -420,9 +418,7 @@ def _panel_frequency_avg(panel: Panel, data: LevitonData) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
-def _panel_frequency(
-    panel: Panel, data: LevitonData, leg: int
-) -> float | None:
+def _panel_frequency(panel: Panel, data: LevitonData, leg: int) -> float | None:
     """Get line frequency from the first breaker on a leg of a DAU panel.
 
     Each breaker reports its own leg's frequency in line_frequency.
@@ -471,9 +467,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
-        value_fn=lambda b, d, _o: calc_daily_energy(
-            b.id, _breaker_energy(b), d
-        ),
+        value_fn=lambda b, d, _o: calc_daily_energy(b.id, _breaker_energy(b), d),
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
     ),
     LevitonBreakerSensorDescription(
@@ -496,8 +490,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         value_fn=lambda b, _d, _o: round(
             (b.energy_import or 0) + (b.energy_import_2 or 0), 3
         ),
-        exists_fn=lambda b: (b.is_smart or b.has_lsbma)
-        and b.energy_import is not None,
+        exists_fn=lambda b: (b.is_smart or b.has_lsbma) and b.energy_import is not None,
     ),
     LevitonBreakerSensorDescription(
         key="breaker_status",
@@ -614,9 +607,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
-        value_fn=lambda c, d: calc_daily_energy(
-            f"ct_{c.id}", _ct_energy(c), d
-        ),
+        value_fn=lambda c, d: calc_daily_energy(f"ct_{c.id}", _ct_energy(c), d),
     ),
     # Diagnostics
     LevitonCtSensorDescription(

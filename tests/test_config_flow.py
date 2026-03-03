@@ -96,9 +96,7 @@ async def test_user_flow_invalid_auth(hass: HomeAssistant) -> None:
     with patch(
         "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
-        mock_cls.return_value.login = AsyncMock(
-            side_effect=LevitonAuthError("Invalid")
-        )
+        mock_cls.return_value.login = AsyncMock(side_effect=LevitonAuthError("Invalid"))
 
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -136,9 +134,7 @@ async def test_user_flow_unknown_error(hass: HomeAssistant) -> None:
     with patch(
         "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
-        mock_cls.return_value.login = AsyncMock(
-            side_effect=RuntimeError("Unexpected")
-        )
+        mock_cls.return_value.login = AsyncMock(side_effect=RuntimeError("Unexpected"))
 
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -484,9 +480,7 @@ async def test_reconfigure_flow_unknown_error(hass: HomeAssistant) -> None:
     with patch(
         "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
-        mock_cls.return_value.login = AsyncMock(
-            side_effect=RuntimeError("Unexpected")
-        )
+        mock_cls.return_value.login = AsyncMock(side_effect=RuntimeError("Unexpected"))
 
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -510,9 +504,7 @@ async def test_reauth_flow_unknown_error(hass: HomeAssistant) -> None:
     with patch(
         "homeassistant.components.leviton_load_center.config_flow.LevitonClient"
     ) as mock_cls:
-        mock_cls.return_value.login = AsyncMock(
-            side_effect=RuntimeError("Unexpected")
-        )
+        mock_cls.return_value.login = AsyncMock(side_effect=RuntimeError("Unexpected"))
 
         entry = MockConfigEntry(
             domain=DOMAIN,

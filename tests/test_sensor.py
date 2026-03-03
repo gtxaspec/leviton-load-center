@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aioleviton import Breaker, Ct, Whem
 
 from homeassistant.components.leviton_load_center.coordinator import LevitonData
 from homeassistant.components.leviton_load_center.entity import should_include_breaker
@@ -57,14 +56,23 @@ def test_breaker_leg_2_pole() -> None:
     assert _breaker_leg(breaker) == "Both"
 
 
-@pytest.mark.parametrize("position,expected", [
-    (1, "1"), (2, "1"),    # row 1 → Leg 1
-    (3, "2"), (4, "2"),    # row 2 → Leg 2
-    (5, "1"), (6, "1"),    # row 3 → Leg 1
-    (7, "2"), (8, "2"),    # row 4 → Leg 2
-    (17, "1"), (18, "1"),  # row 9 → Leg 1
-    (19, "2"), (20, "2"),  # row 10 → Leg 2
-])
+@pytest.mark.parametrize(
+    "position,expected",
+    [
+        (1, "1"),
+        (2, "1"),  # row 1 → Leg 1
+        (3, "2"),
+        (4, "2"),  # row 2 → Leg 2
+        (5, "1"),
+        (6, "1"),  # row 3 → Leg 1
+        (7, "2"),
+        (8, "2"),  # row 4 → Leg 2
+        (17, "1"),
+        (18, "1"),  # row 9 → Leg 1
+        (19, "2"),
+        (20, "2"),  # row 10 → Leg 2
+    ],
+)
 def test_breaker_leg_by_position(position, expected) -> None:
     """Test breaker leg assignment follows paired-row pattern."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
@@ -73,23 +81,26 @@ def test_breaker_leg_by_position(position, expected) -> None:
     assert _breaker_leg(breaker) == expected
 
 
-@pytest.mark.parametrize("raw,expected", [
-    ("ManualON", "on"),
-    ("ManualOFF", "off"),
-    ("COMMUNICATING", "connecting"),
-    ("NotCommunicating", "offline"),
-    ("CommunicationFailure", "offline"),
-    ("UNDEFINED", "offline"),
-    ("SoftwareTrip", "software_trip"),
-    ("GFCIFault", "gfci_fault"),
-    ("AFCISerialArc15AFault", "afci_fault"),
-    ("OverCurrentTripPhase1", "overcurrent_trip"),
-    ("OverloadTrip", "overload_trip"),
-    ("ShortCircuitTrip", "short_circuit_trip"),
-    ("UpstreamFault", "upstream_fault"),
-    ("SomeUnknownState", None),
-    (None, None),
-])
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("ManualON", "on"),
+        ("ManualOFF", "off"),
+        ("COMMUNICATING", "connecting"),
+        ("NotCommunicating", "offline"),
+        ("CommunicationFailure", "offline"),
+        ("UNDEFINED", "offline"),
+        ("SoftwareTrip", "software_trip"),
+        ("GFCIFault", "gfci_fault"),
+        ("AFCISerialArc15AFault", "afci_fault"),
+        ("OverCurrentTripPhase1", "overcurrent_trip"),
+        ("OverloadTrip", "overload_trip"),
+        ("ShortCircuitTrip", "short_circuit_trip"),
+        ("UpstreamFault", "upstream_fault"),
+        ("SomeUnknownState", None),
+        (None, None),
+    ],
+)
 def test_breaker_status_mapping(raw, expected) -> None:
     """Test breaker status maps raw currentState to display values."""
     breaker = deepcopy(MOCK_BREAKER_GEN1)
@@ -454,6 +465,34 @@ def test_ct_energy_with_none_legs() -> None:
 # --- WHEM/panel leg edge cases ---
 
 
+def test_whem_leg_power_multiple_cts() -> None:
+    """Test WHEM leg power sums across multiple CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    ct1 = deepcopy(MOCK_CT)
+    ct2 = deepcopy(MOCK_CT)
+    ct2.id = 7874
+    ct2.channel = 2
+    ct2.active_power = 100
+    ct2.active_power_2 = 50
+    data = LevitonData(cts={str(ct1.id): ct1, str(ct2.id): ct2})
+    assert _whem_leg_power(whem, data, 1) == 296  # 196 + 100
+    assert _whem_leg_power(whem, data, 2) == 203  # 153 + 50
+
+
+def test_whem_leg_current_multiple_cts() -> None:
+    """Test WHEM leg current sums across multiple CTs."""
+    whem = deepcopy(MOCK_WHEM)
+    ct1 = deepcopy(MOCK_CT)
+    ct2 = deepcopy(MOCK_CT)
+    ct2.id = 7874
+    ct2.channel = 2
+    ct2.rms_current = 4
+    ct2.rms_current_2 = 3
+    data = LevitonData(cts={str(ct1.id): ct1, str(ct2.id): ct2})
+    assert _whem_leg_current(whem, data, 1) == 12  # 8 + 4
+    assert _whem_leg_current(whem, data, 2) == 9  # 6 + 3
+
+
 def test_whem_leg_power_no_matching_cts() -> None:
     """Test WHEM leg power returns None when no CTs belong to WHEM."""
     whem = deepcopy(MOCK_WHEM)
@@ -713,6 +752,7 @@ async def test_sensor_setup_entry_creates_entities() -> None:
         LevitonPanelSensor,
         LevitonWhemSensor,
     )
+
     breaker_sensors = [e for e in added_entities if isinstance(e, LevitonBreakerSensor)]
     ct_sensors = [e for e in added_entities if isinstance(e, LevitonCtSensor)]
     whem_sensors = [e for e in added_entities if isinstance(e, LevitonWhemSensor)]
@@ -730,7 +770,9 @@ async def test_sensor_setup_entry_creates_entities() -> None:
     # 1 panel × 25 descriptions
     assert len(panel_sensors) == len(PANEL_SENSORS)
     # Total is sum of all
-    assert len(added_entities) == len(breaker_sensors) + len(ct_sensors) + len(whem_sensors) + len(panel_sensors)
+    assert len(added_entities) == len(breaker_sensors) + len(ct_sensors) + len(
+        whem_sensors
+    ) + len(panel_sensors)
 
 
 async def test_sensor_setup_skips_unused_cts() -> None:

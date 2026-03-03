@@ -19,7 +19,13 @@ from .conftest import MOCK_BREAKER_GEN1, MOCK_CT, MOCK_PANEL, MOCK_WHEM
 async def test_diagnostics_output(hass) -> None:
     """Test diagnostics returns expected structure with redacted data."""
     whem = deepcopy(MOCK_WHEM)
-    whem.raw = {"id": whem.id, "name": "Test", "mac": "AA:BB:CC", "token": "secret", "serial": "1000_ABCD_EF01"}
+    whem.raw = {
+        "id": whem.id,
+        "name": "Test",
+        "mac": "AA:BB:CC",
+        "token": "secret",
+        "serial": "1000_ABCD_EF01",
+    }
     panel = deepcopy(MOCK_PANEL)
     panel.raw = {"id": panel.id, "wifiSSID": "MyNetwork"}
     breaker = deepcopy(MOCK_BREAKER_GEN1)
@@ -38,9 +44,7 @@ async def test_diagnostics_output(hass) -> None:
     coordinator.data = data
 
     entry = MagicMock()
-    entry.runtime_data = LevitonRuntimeData(
-        client=MagicMock(), coordinator=coordinator
-    )
+    entry.runtime_data = LevitonRuntimeData(client=MagicMock(), coordinator=coordinator)
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 

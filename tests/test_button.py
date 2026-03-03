@@ -24,7 +24,10 @@ from homeassistant.components.leviton_load_center.button import (
     LevitonWhemIdentifyButton,
     async_setup_entry,
 )
-from homeassistant.components.leviton_load_center.coordinator import LevitonData, LevitonRuntimeData
+from homeassistant.components.leviton_load_center.coordinator import (
+    LevitonData,
+    LevitonRuntimeData,
+)
 from homeassistant.components.leviton_load_center.entity import (
     breaker_device_info,
     panel_device_info,
@@ -188,7 +191,6 @@ async def test_trip_button_error_raises_ha_error(mock_client) -> None:
         coordinator, TRIP_BUTTON_DESCRIPTION, breaker.id, dev_info
     )
 
-
     with pytest.raises(HomeAssistantError):
         await button.async_press()
 
@@ -205,7 +207,6 @@ async def test_whem_identify_error_raises_ha_error(mock_client) -> None:
     button = LevitonWhemIdentifyButton(
         coordinator, IDENTIFY_BUTTON_DESCRIPTION, whem.id, dev_info
     )
-
 
     with pytest.raises(HomeAssistantError):
         await button.async_press()
