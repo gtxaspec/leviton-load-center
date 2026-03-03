@@ -199,7 +199,8 @@ This project was inspired by [ldata-ha](https://github.com/rwoldberg/ldata-ha) b
 
 ## Safety Notice
 
-> **Warning:** This integration controls electrical equipment. Always follow proper electrical safety procedures and local codes. The developers are not responsible for any damage or injury resulting from use of this software.
+> [!WARNING]
+> This integration controls electrical equipment. Always follow proper electrical safety procedures and local codes. The developers are not responsible for any damage or injury resulting from use of this software.
 
 ## Disclaimer
 
