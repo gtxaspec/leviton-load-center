@@ -197,6 +197,10 @@ Thanks to [Leviton](https://www.leviton.com/) for creating the Smart Load Center
 
 This project was inspired by [ldata-ha](https://github.com/rwoldberg/ldata-ha) by [@rwoldberg](https://github.com/rwoldberg), an earlier Home Assistant integration for Leviton LDATA panels.
 
+## Safety Notice
+
+> **Warning:** This integration controls electrical equipment. Always follow proper electrical safety procedures and local codes. The developers are not responsible for any damage or injury resulting from use of this software.
+
 ## Disclaimer
 
 This is a do-it-yourself project for Leviton Load Center product users and is not affiliated with, endorsed by, or sponsored by Leviton Manufacturing Co., Inc. "Leviton" and all related product names are trademarks of Leviton Manufacturing Co., Inc. This integration interacts with Leviton's cloud services using your own account credentials. Use at your own risk.
