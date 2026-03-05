@@ -27,11 +27,14 @@ Supports both hub types and accessories:
 
 ### HACS (Recommended)
 
+> [!NOTE]
+> This integration is pending HACS default repository approval. Until then, add it as a custom repository.
+
 1. Open HACS in Home Assistant
-2. Go to Integrations
-3. Click the three dots menu and select "Custom repositories"
-4. Add `https://github.com/gtxaspec/leviton-load-center` with category "Integration"
-5. Search for "Leviton Load Center" and install
+2. Go to **Integrations** → click the three dots menu (⋮) → **Custom repositories**
+3. Add repository: `https://github.com/gtxaspec/leviton-load-center`
+4. Set category: **Integration** → click **Add**
+5. Search for "Leviton Load Center" and click **Install**
 6. Restart Home Assistant
 
 ### Manual
