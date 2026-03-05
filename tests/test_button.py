@@ -5,11 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from aioleviton import LevitonConnectionError
-
-from homeassistant.exceptions import HomeAssistantError
+import pytest
 
 from homeassistant.components.leviton_load_center.button import (
     ALL_OFF_BUTTON_DESCRIPTION,
@@ -33,6 +30,7 @@ from homeassistant.components.leviton_load_center.entity import (
     panel_device_info,
     whem_device_info,
 )
+from homeassistant.exceptions import HomeAssistantError
 
 from .conftest import MOCK_BREAKER_GEN1, MOCK_BREAKER_GEN2, MOCK_PANEL, MOCK_WHEM
 

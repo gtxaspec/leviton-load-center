@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from aioleviton import (
     LevitonAuthError,
     LevitonConnectionError,
     LevitonInvalidCode,
     LevitonTwoFactorRequired,
 )
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant import config_entries
 from homeassistant.components.leviton_load_center.const import (
@@ -25,7 +25,6 @@ from homeassistant.components.leviton_load_center.const import (
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import (
     MOCK_AUTH_TOKEN,

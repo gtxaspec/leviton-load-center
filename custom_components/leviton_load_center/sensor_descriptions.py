@@ -30,13 +30,13 @@ from .const import (
     DEFAULT_VOLTAGE_208,
     STATE_AFCI_MISWIRE,
     STATE_AFCI_PARALLEL_FAULT,
+    STATE_AFCI_SERIAL_ARC_5A,
     STATE_AFCI_SERIAL_ARC_10A,
     STATE_AFCI_SERIAL_ARC_15A,
     STATE_AFCI_SERIAL_ARC_20A,
     STATE_AFCI_SERIAL_ARC_30A,
-    STATE_AFCI_SERIAL_ARC_5A,
-    STATE_COMMUNICATION_FAILURE,
     STATE_COMMUNICATING,
+    STATE_COMMUNICATION_FAILURE,
     STATE_GFCI_FAULT,
     STATE_MANUAL_OFF,
     STATE_MANUAL_ON,
@@ -56,7 +56,6 @@ from .const import (
 )
 from .coordinator import LevitonData
 from .energy import calc_daily_energy
-
 
 # --- Description dataclasses ---
 
@@ -530,7 +529,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         native_unit_of_measurement="dBm",
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda b, _d, _o: b.ble_rssi,
+        value_fn=lambda b, _d, _o: b.ble_rssi or None,
         exists_fn=lambda b: b.is_smart,
     ),
     LevitonBreakerSensorDescription(

@@ -5,16 +5,11 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from aioleviton import (
     LevitonAuthError,
     LevitonConnectionError,
     LevitonTwoFactorRequired,
 )
-
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant.components.leviton_load_center import _cleanup_hidden_devices
@@ -24,6 +19,9 @@ from homeassistant.components.leviton_load_center.const import (
     DOMAIN,
 )
 from homeassistant.components.leviton_load_center.coordinator import LevitonData
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from homeassistant.core import HomeAssistant
 
 from .conftest import (
     MOCK_BREAKER_GEN1,

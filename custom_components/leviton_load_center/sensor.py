@@ -5,10 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -56,33 +53,39 @@ async def async_setup_entry(
         if not should_include_breaker(breaker, entry.options):
             continue
         dev_info = breaker_device_info(breaker_id, data)
-        for desc in BREAKER_SENSORS:
-            if desc.exists_fn(breaker):
-                entities.append(
-                    LevitonBreakerSensor(
-                        coordinator, desc, breaker_id, dev_info, entry.options
-                    )
-                )
+        entities.extend(
+            LevitonBreakerSensor(
+                coordinator, desc, breaker_id, dev_info, entry.options
+            )
+            for desc in BREAKER_SENSORS
+            if desc.exists_fn(breaker)
+        )
 
     # CT sensors (skip unused channels)
     for ct_id, ct in data.cts.items():
         if ct.usage_type == "NOT_USED":
             continue
         dev_info = ct_device_info(ct_id, data)
-        for desc in CT_SENSORS:
-            entities.append(LevitonCtSensor(coordinator, desc, ct_id, dev_info))
+        entities.extend(
+            LevitonCtSensor(coordinator, desc, ct_id, dev_info)
+            for desc in CT_SENSORS
+        )
 
     # WHEM sensors
     for whem_id in data.whems:
         dev_info = whem_device_info(whem_id, data)
-        for desc in WHEM_SENSORS:
-            entities.append(LevitonWhemSensor(coordinator, desc, whem_id, dev_info))
+        entities.extend(
+            LevitonWhemSensor(coordinator, desc, whem_id, dev_info)
+            for desc in WHEM_SENSORS
+        )
 
     # Panel sensors
     for panel_id in data.panels:
         dev_info = panel_device_info(panel_id, data)
-        for desc in PANEL_SENSORS:
-            entities.append(LevitonPanelSensor(coordinator, desc, panel_id, dev_info))
+        entities.extend(
+            LevitonPanelSensor(coordinator, desc, panel_id, dev_info)
+            for desc in PANEL_SENSORS
+        )
 
     LOGGER.debug("Sensor platform: created %d entities", len(entities))
     async_add_entities(entities)

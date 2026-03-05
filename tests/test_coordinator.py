@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from copy import deepcopy
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from aioleviton import LevitonAuthError, LevitonConnectionError
-
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import UpdateFailed
+import pytest
 
 from homeassistant.components.leviton_load_center.const import STATE_SOFTWARE_TRIP
 from homeassistant.components.leviton_load_center.coordinator import (
@@ -21,13 +17,15 @@ from homeassistant.components.leviton_load_center.coordinator import (
 )
 from homeassistant.components.leviton_load_center.energy import (
     EnergyTracker,
+    calc_daily_energy,
     normalize_breaker_energy,
     normalize_ct_energy,
-    calc_daily_energy,
 )
 from homeassistant.components.leviton_load_center.websocket import (
     needs_individual_breaker_subs,
 )
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .conftest import (
     MOCK_AUTH_TOKEN,

@@ -327,7 +327,10 @@ class EnergyTracker:
         """
         prev = self._energy_high_water.get(key)
         if prev is not None and value < prev:
-            LOGGER.debug("Clamped decreasing energy %s: %s -> %s", key, value, prev)
+            if prev - value > 0.01:
+                LOGGER.debug(
+                    "Clamped decreasing energy %s: %s -> %s", key, value, prev
+                )
             return prev
         self._energy_high_water[key] = value
         return value

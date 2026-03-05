@@ -21,15 +21,9 @@ from aioleviton import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.event import (
-    async_call_later,
-    async_track_time_change,
-)
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.event import async_call_later, async_track_time_change
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, LOGGER
 from .energy import EnergyTracker
@@ -86,6 +80,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         self.ws_manager = WebSocketManager(self)
 
     def clamp_increasing(self, key: str, value: float) -> float:
+        """Clamp a value to be monotonically increasing for the given key."""
         return self.energy.clamp_increasing(key, value)
 
     # --- Core coordinator logic ---

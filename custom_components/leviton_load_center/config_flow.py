@@ -4,14 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
-from homeassistant.helpers.selector import (
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
-)
-
 from aioleviton import (
     LevitonAuthError,
     LevitonClient,
@@ -19,6 +11,7 @@ from aioleviton import (
     LevitonInvalidCode,
     LevitonTwoFactorRequired,
 )
+import voluptuous as vol
 
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -29,6 +22,11 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 
 from .const import (
     CONF_CALCULATED_CURRENT,
@@ -109,7 +107,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         except LevitonAuthError as err:
             LOGGER.warning("Auth failed during 2FA for %s: %s", self._email, err)
             errors["base"] = "invalid_auth"
-        except Exception:
+        except Exception:  # noqa: BLE001
             LOGGER.exception("Unexpected error during 2FA for %s", self._email)
             errors["base"] = "unknown"
         return errors
@@ -157,7 +155,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
             except LevitonAuthError as err:
                 LOGGER.warning("Authentication failed for %s: %s", self._email, err)
                 errors["base"] = "invalid_auth"
-            except Exception:
+            except Exception:  # noqa: BLE001
                 LOGGER.exception("Unexpected error during login")
                 errors["base"] = "unknown"
             else:
@@ -244,7 +242,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                     "Authentication failed during reauth for %s: %s", self._email, err
                 )
                 errors["base"] = "invalid_auth"
-            except Exception:
+            except Exception:  # noqa: BLE001
                 LOGGER.exception("Unexpected error during reauth")
                 errors["base"] = "unknown"
             else:
@@ -311,7 +309,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
                     "Authentication failed during reconfigure for %s: %s", email, err
                 )
                 errors["base"] = "invalid_auth"
-            except Exception:
+            except Exception:  # noqa: BLE001
                 LOGGER.exception("Unexpected error during reconfigure")
                 errors["base"] = "unknown"
             else:

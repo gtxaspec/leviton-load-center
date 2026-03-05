@@ -11,12 +11,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    BREAKER_OFFLINE_STATES,
-    CONF_HIDE_DUMMY,
-    DEFAULT_HIDE_DUMMY,
-    DOMAIN,
-)
+from .const import BREAKER_OFFLINE_STATES, CONF_HIDE_DUMMY, DEFAULT_HIDE_DUMMY, DOMAIN
 from .coordinator import LevitonCoordinator, LevitonData
 
 

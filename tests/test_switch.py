@@ -5,11 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from aioleviton import LevitonConnectionError
-
-from homeassistant.exceptions import HomeAssistantError
+import pytest
 
 from homeassistant.components.leviton_load_center.coordinator import (
     LevitonData,
@@ -23,6 +20,7 @@ from homeassistant.components.leviton_load_center.switch import (
     LevitonBreakerSwitch,
     async_setup_entry,
 )
+from homeassistant.exceptions import HomeAssistantError
 
 from .conftest import MOCK_BREAKER_GEN1, MOCK_BREAKER_GEN2, MOCK_WHEM
 
@@ -33,10 +31,9 @@ def _make_switch(breaker, data, mock_client) -> LevitonBreakerSwitch:
     coordinator.data = data
     coordinator.client = mock_client
     dev_info = breaker_device_info(breaker.id, data)
-    switch = LevitonBreakerSwitch(
+    return LevitonBreakerSwitch(
         coordinator, BREAKER_SWITCH_DESCRIPTION, breaker.id, dev_info
     )
-    return switch
 
 
 def _make_identify_switch(breaker, data, mock_client) -> LevitonBreakerIdentifySwitch:
@@ -45,10 +42,9 @@ def _make_identify_switch(breaker, data, mock_client) -> LevitonBreakerIdentifyS
     coordinator.data = data
     coordinator.client = mock_client
     dev_info = breaker_device_info(breaker.id, data)
-    switch = LevitonBreakerIdentifySwitch(
+    return LevitonBreakerIdentifySwitch(
         coordinator, IDENTIFY_SWITCH_DESCRIPTION, breaker.id, dev_info
     )
-    return switch
 
 
 def test_is_on_remote_on() -> None:

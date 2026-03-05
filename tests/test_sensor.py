@@ -7,8 +7,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
-from homeassistant.components.leviton_load_center.coordinator import LevitonData
+from homeassistant.components.leviton_load_center.coordinator import (
+    LevitonData,
+    LevitonRuntimeData,
+)
 from homeassistant.components.leviton_load_center.entity import should_include_breaker
 from homeassistant.components.leviton_load_center.sensor import async_setup_entry
 from homeassistant.components.leviton_load_center.sensor_descriptions import (
@@ -35,8 +37,6 @@ from homeassistant.components.leviton_load_center.sensor_descriptions import (
     _whem_total_power,
 )
 
-from homeassistant.components.leviton_load_center.coordinator import LevitonRuntimeData
-
 from .conftest import (
     MOCK_BREAKER_GEN1,
     MOCK_BREAKER_GEN2,
@@ -44,7 +44,6 @@ from .conftest import (
     MOCK_PANEL,
     MOCK_WHEM,
 )
-
 
 # --- Helper function tests ---
 
@@ -57,7 +56,7 @@ def test_breaker_leg_2_pole() -> None:
 
 
 @pytest.mark.parametrize(
-    "position,expected",
+    ("position", "expected"),
     [
         (1, "1"),
         (2, "1"),  # row 1 → Leg 1
@@ -82,7 +81,7 @@ def test_breaker_leg_by_position(position, expected) -> None:
 
 
 @pytest.mark.parametrize(
-    "raw,expected",
+    ("raw", "expected"),
     [
         ("ManualON", "on"),
         ("ManualOFF", "off"),
@@ -640,7 +639,7 @@ def test_panel_daily_energy_no_baselines() -> None:
 # --- Panel leg power tests ---
 
 
-@pytest.mark.parametrize("leg,expected", [(1, 100), (2, 200)])
+@pytest.mark.parametrize(("leg", "expected"), [(1, 100), (2, 200)])
 def test_panel_leg_power(leg, expected) -> None:
     """Test panel leg power sums only the breakers on that leg."""
     panel = deepcopy(MOCK_PANEL)
@@ -667,7 +666,7 @@ def test_panel_leg_power_no_breakers() -> None:
 # --- Panel leg current tests ---
 
 
-@pytest.mark.parametrize("leg,expected", [(1, 5), (2, 10)])
+@pytest.mark.parametrize(("leg", "expected"), [(1, 5), (2, 10)])
 def test_panel_leg_current(leg, expected) -> None:
     """Test panel leg current sums only the breakers on that leg."""
     panel = deepcopy(MOCK_PANEL)
@@ -686,7 +685,7 @@ def test_panel_leg_current(leg, expected) -> None:
 # --- Panel frequency tests ---
 
 
-@pytest.mark.parametrize("position,leg,freq", [(1, 1, 60.0), (3, 2, 60.1)])
+@pytest.mark.parametrize(("position", "leg", "freq"), [(1, 1, 60.0), (3, 2, 60.1)])
 def test_panel_frequency(position, leg, freq) -> None:
     """Test panel frequency returns line_frequency from the correct leg."""
     panel = deepcopy(MOCK_PANEL)

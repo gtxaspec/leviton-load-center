@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Callable
 from datetime import timedelta
+import time
 from typing import TYPE_CHECKING, Any
 
-from aioleviton import LevitonConnectionError, LevitonAuthError, LevitonWebSocket, Whem
+from aioleviton import LevitonAuthError, LevitonConnectionError, LevitonWebSocket, Whem
 
 from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_time_interval
@@ -32,13 +32,14 @@ def needs_individual_breaker_subs(whem: Whem) -> bool:
         return True  # Assume newest FW if unknown
     try:
         parts = tuple(int(x) for x in whem.version.split("."))
-        return parts >= (2, 0, 0)
     except (ValueError, AttributeError):
         LOGGER.debug(
             "Could not parse WHEM FW version '%s', assuming >=2.0.0",
             whem.version,
         )
         return True  # Assume newest FW if unparseable
+    else:
+        return parts >= (2, 0, 0)
 
 
 class WebSocketManager:
@@ -324,7 +325,7 @@ class WebSocketManager:
             if "ResidentialBreaker" in data_payload:
                 for breaker_data in data_payload["ResidentialBreaker"]:
                     if self._apply_breaker_ws_update(breaker_data):
-                        breaker_ids.append(breaker_data.get("id", "?"))
+                        breaker_ids.append(breaker_data.get("id", "?"))  # noqa: PERF401
 
             # Check for child CT updates
             if "IotCt" in data_payload:
@@ -352,7 +353,7 @@ class WebSocketManager:
             if "ResidentialBreaker" in data_payload:
                 for breaker_data in data_payload["ResidentialBreaker"]:
                     if self._apply_breaker_ws_update(breaker_data):
-                        breaker_ids.append(breaker_data.get("id", "?"))
+                        breaker_ids.append(breaker_data.get("id", "?"))  # noqa: PERF401
 
             # Panel own property updates
             panel_data = {
@@ -386,18 +387,16 @@ class WebSocketManager:
         if breaker_ids or ct_ids or hub_updated:
             parts = [f"{model_name} {model_id}"]
             if hub_updated:
-                parts.append(
-                    "hub(%s)"
-                    % ", ".join(
-                        k
-                        for k in data_payload
-                        if k not in ("ResidentialBreaker", "IotCt")
-                    )
+                hub_keys = ", ".join(
+                    k
+                    for k in data_payload
+                    if k not in ("ResidentialBreaker", "IotCt")
                 )
+                parts.append(f"hub({hub_keys})")
             if breaker_ids:
-                parts.append("breakers(%s)" % " ".join(breaker_ids))
+                parts.append(f"breakers({' '.join(breaker_ids)})")
             if ct_ids:
-                parts.append("CTs(%s)" % " ".join(ct_ids))
+                parts.append(f"CTs({' '.join(ct_ids)})")
             LOGGER.debug("WS update: %s", ", ".join(parts))
             self.coordinator.async_set_updated_data(coordinator_data)
 

@@ -5,15 +5,13 @@ from __future__ import annotations
 from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from aioleviton import AuthToken, Breaker, Ct, Panel, Permission, Residence, Whem
-
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant.components.leviton_load_center.const import DOMAIN
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from homeassistant.core import HomeAssistant
 
 MOCK_EMAIL = "test@example.com"
 MOCK_PASSWORD = "testpassword123"
@@ -283,4 +281,4 @@ def mock_client() -> Generator[AsyncMock]:
 @pytest.fixture
 def mock_websocket(mock_client: AsyncMock) -> Generator[MagicMock]:
     """Return the mocked LevitonWebSocket from mock_client.create_websocket()."""
-    yield mock_client._mock_ws
+    return mock_client._mock_ws
