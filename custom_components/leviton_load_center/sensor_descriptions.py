@@ -461,6 +461,22 @@ def _ct_energy(ct: Ct) -> float | None:
     return round((ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0), 3)
 
 
+def _breaker_energy_import(breaker: Breaker) -> float | None:
+    """Total lifetime energy import across all poles of a breaker."""
+    if breaker.energy_import is None:
+        return None
+    if breaker.poles == 2:
+        return round(breaker.energy_import + (breaker.energy_import_2 or 0), 3)
+    return breaker.energy_import
+
+
+def _ct_energy_import(ct: Ct) -> float | None:
+    """Total lifetime energy import across both legs of a CT."""
+    if ct.energy_import is None and ct.energy_import_2 is None:
+        return None
+    return round((ct.energy_import or 0) + (ct.energy_import_2 or 0), 3)
+
+
 # --- Breaker sensor descriptions ---
 
 BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
@@ -501,6 +517,18 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b, _d, _o: _breaker_energy(b),
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
+    ),
+    LevitonBreakerSensorDescription(
+        key="energy_import",
+        translation_key="energy_import",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        value_fn=lambda b, d, _o: calc_daily_energy(
+            f"{b.id}_import", _breaker_energy_import(b), d
+        ),
+        exists_fn=lambda b: (b.is_smart or b.has_lsbma) and b.energy_import is not None,
     ),
     LevitonBreakerSensorDescription(
         key="lifetime_energy_import",
@@ -676,6 +704,18 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda c, _d: c.active_power_2,
+    ),
+    LevitonCtSensorDescription(
+        key="energy_import",
+        translation_key="energy_import",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        value_fn=lambda c, d: calc_daily_energy(
+            f"ct_{c.id}_import", _ct_energy_import(c), d
+        ),
+        exists_fn=lambda c: c.energy_import is not None,
     ),
     LevitonCtSensorDescription(
         key="lifetime_energy_import",

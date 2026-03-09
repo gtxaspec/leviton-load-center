@@ -52,7 +52,7 @@ async def async_setup_entry(
     show_import = entry.options.get(CONF_SHOW_ENERGY_IMPORT, DEFAULT_SHOW_ENERGY_IMPORT)
 
     def _skip_import(key: str) -> bool:
-        return key == "lifetime_energy_import" and not show_import
+        return key in ("lifetime_energy_import", "energy_import") and not show_import
 
     # Breaker sensors
     for breaker_id, breaker in data.breakers.items():
@@ -126,7 +126,7 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
     @property
     def last_reset(self) -> datetime | None:
         """Return the time of the last reset for daily energy sensors."""
-        if self.entity_description.key == "energy":
+        if self.entity_description.key in ("energy", "energy_import"):
             return _today_midnight()
         return None
 
@@ -156,7 +156,7 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
     @property
     def last_reset(self) -> datetime | None:
         """Return the time of the last reset for daily energy sensors."""
-        if self.entity_description.key == "energy":
+        if self.entity_description.key in ("energy", "energy_import"):
             return _today_midnight()
         return None
 
@@ -184,7 +184,7 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
     @property
     def last_reset(self) -> datetime | None:
         """Return the time of the last reset for daily energy sensors."""
-        if self.entity_description.key == "energy":
+        if self.entity_description.key in ("energy", "energy_import"):
             return _today_midnight()
         return None
 
@@ -212,7 +212,7 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
     @property
     def last_reset(self) -> datetime | None:
         """Return the time of the last reset for daily energy sensors."""
-        if self.entity_description.key == "energy":
+        if self.entity_description.key in ("energy", "energy_import"):
             return _today_midnight()
         return None
 

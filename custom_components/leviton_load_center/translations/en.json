@@ -61,7 +61,7 @@
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
           "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached.",
-          "show_energy_import": "Show lifetime energy import sensors for breakers and CTs that report import data.",
+          "show_energy_import": "Show daily and lifetime energy import sensors for breakers and CTs that report import data.",
           "stagger_delay": "Delay in seconds between each breaker command for All Off, All On, and Trip All buttons."
         }
       }
@@ -96,7 +96,7 @@
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
           "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached.",
-          "show_energy_import": "Show lifetime energy import sensors for breakers and CTs that report import data.",
+          "show_energy_import": "Show daily and lifetime energy import sensors for breakers and CTs that report import data.",
           "stagger_delay": "Delay in seconds between each breaker command for All Off, All On, and Trip All buttons."
         }
       }
@@ -112,6 +112,9 @@
       },
       "energy": {
         "name": "Daily energy"
+      },
+      "energy_import": {
+        "name": "Daily energy import"
       },
       "breaker_status": {
         "name": "Breaker status",

@@ -12,6 +12,7 @@ from homeassistant.components.leviton_load_center.coordinator import (
     LevitonRuntimeData,
 )
 from homeassistant.components.leviton_load_center.entity import should_include_breaker
+from homeassistant.components.leviton_load_center.energy import snapshot_daily_baselines
 from homeassistant.components.leviton_load_center.sensor import async_setup_entry
 from homeassistant.components.leviton_load_center.sensor_descriptions import (
     BREAKER_SENSORS,
@@ -461,6 +462,81 @@ def test_ct_energy_with_none_legs() -> None:
     assert desc.value_fn(ct, LevitonData()) is None
 
 
+# --- Daily energy import tests ---
+
+
+def test_ct_daily_energy_import() -> None:
+    """Test CT daily energy import uses import baselines."""
+    ct = deepcopy(MOCK_CT)
+    # ct import total = 100 + 90 = 190, baseline = 150 → daily = 40
+    data = LevitonData(
+        cts={str(ct.id): ct},
+        daily_baselines={f"ct_{ct.id}_import": 150.0},
+    )
+    desc = next(d for d in CT_SENSORS if d.key == "energy_import")
+    assert desc.value_fn(ct, data) == 40.0
+
+
+def test_ct_daily_energy_import_none_when_no_import() -> None:
+    """Test CT daily energy import returns None when no import data."""
+    ct = deepcopy(MOCK_CT)
+    ct.energy_import = None
+    ct.energy_import_2 = None
+    data = LevitonData(daily_baselines={})
+    desc = next(d for d in CT_SENSORS if d.key == "energy_import")
+    assert desc.exists_fn(ct) is False
+
+
+def test_breaker_daily_energy_import_exists() -> None:
+    """Test breaker daily energy import exists only when import data present."""
+    desc = next(d for d in BREAKER_SENSORS if d.key == "energy_import")
+    # MOCK_BREAKER_GEN1 has energy_import=None
+    assert desc.exists_fn(MOCK_BREAKER_GEN1) is False
+    # Set import data
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_import = 50.0
+    assert desc.exists_fn(breaker) is True
+
+
+def test_breaker_daily_energy_import_with_baseline() -> None:
+    """Test breaker daily energy import computes from baseline."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_import = 200.0
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        daily_baselines={f"{breaker.id}_import": 180.0},
+    )
+    desc = next(d for d in BREAKER_SENSORS if d.key == "energy_import")
+    assert desc.value_fn(breaker, data, {}) == 20.0
+
+
+def test_snapshot_daily_baselines_includes_import() -> None:
+    """Test snapshot_daily_baselines captures both consumption and import baselines."""
+    ct = deepcopy(MOCK_CT)
+    breaker = deepcopy(MOCK_BREAKER_GEN1)
+    breaker.energy_import = 50.0
+    data = LevitonData(
+        breakers={breaker.id: breaker},
+        cts={str(ct.id): ct},
+    )
+    snapshot_daily_baselines(data)
+    # Consumption baselines
+    assert data.daily_baselines[breaker.id] == 3402.017
+    assert data.daily_baselines[f"ct_{ct.id}"] == 9500.0
+    # Import baselines
+    assert data.daily_baselines[f"{breaker.id}_import"] == 50.0
+    assert data.daily_baselines[f"ct_{ct.id}_import"] == 190.0
+
+
+def test_snapshot_daily_baselines_skips_import_when_none() -> None:
+    """Test snapshot_daily_baselines skips import baseline when no import data."""
+    breaker = deepcopy(MOCK_BREAKER_GEN1)  # energy_import=None
+    data = LevitonData(breakers={breaker.id: breaker})
+    snapshot_daily_baselines(data)
+    assert breaker.id in data.daily_baselines
+    assert f"{breaker.id}_import" not in data.daily_baselines
+
+
 # --- WHEM/panel leg edge cases ---
 
 
@@ -758,19 +834,20 @@ async def test_sensor_setup_entry_creates_entities() -> None:
     panel_sensors = [e for e in added_entities if isinstance(e, LevitonPanelSensor)]
 
     # Both breakers are smart, exact count from exists_fn
-    # energy_import hidden by default (show_energy_import=False)
+    # energy_import and lifetime_energy_import hidden by default (show_energy_import=False)
+    _import_keys = {"lifetime_energy_import", "energy_import"}
     expected_breaker = sum(
         1 for d in BREAKER_SENSORS
-        if d.exists_fn(gen1) and d.key != "lifetime_energy_import"
+        if d.exists_fn(gen1) and d.key not in _import_keys
     ) + sum(
         1 for d in BREAKER_SENSORS
-        if d.exists_fn(gen2) and d.key != "lifetime_energy_import"
+        if d.exists_fn(gen2) and d.key not in _import_keys
     )
     assert len(breaker_sensors) == expected_breaker
-    # 1 CT × descriptions (minus lifetime_energy_import, hidden by default)
+    # 1 CT × descriptions (minus import sensors, hidden by default)
     expected_ct = sum(
         1 for d in CT_SENSORS
-        if d.exists_fn(ct) and d.key != "lifetime_energy_import"
+        if d.exists_fn(ct) and d.key not in _import_keys
     )
     assert len(ct_sensors) == expected_ct
     # 1 WHEM × 22 descriptions

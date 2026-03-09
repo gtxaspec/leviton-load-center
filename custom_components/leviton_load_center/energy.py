@@ -110,9 +110,17 @@ def snapshot_daily_baselines(data: LevitonData) -> None:
             if breaker.poles == 2:
                 energy += breaker.energy_consumption_2 or 0
             data.daily_baselines[breaker_id] = round(energy, 3)
+        if breaker.energy_import is not None:
+            energy_import = breaker.energy_import
+            if breaker.poles == 2:
+                energy_import += breaker.energy_import_2 or 0
+            data.daily_baselines[f"{breaker_id}_import"] = round(energy_import, 3)
     for ct_id, ct in data.cts.items():
         ct_total = (ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0)
         data.daily_baselines[f"ct_{ct_id}"] = round(ct_total, 3)
+        if ct.energy_import is not None:
+            ct_import = (ct.energy_import or 0) + (ct.energy_import_2 or 0)
+            data.daily_baselines[f"ct_{ct_id}_import"] = round(ct_import, 3)
 
 
 def _correct_device_energy(
