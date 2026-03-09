@@ -120,6 +120,9 @@
       },
       "usage_type": {
         "default": "mdi:tag"
+      },
+      "energy_import": {
+        "default": "mdi:transmission-tower-import"
       }
     },
     "switch": {
@@ -127,6 +130,12 @@
         "default": "mdi:electric-switch-closed",
         "state": {
           "off": "mdi:electric-switch"
+        }
+      },
+      "identify": {
+        "default": "mdi:led-on",
+        "state": {
+          "off": "mdi:led-off"
         }
       }
     },
@@ -136,6 +145,15 @@
       },
       "identify": {
         "default": "mdi:led-on"
+      },
+      "all_off": {
+        "default": "mdi:power-plug-off"
+      },
+      "all_on": {
+        "default": "mdi:power-plug"
+      },
+      "trip_all": {
+        "default": "mdi:alert-octagon"
       }
     },
     "binary_sensor": {
