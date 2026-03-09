@@ -380,6 +380,17 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         await self.energy.correct_energy_values(self.data)
         await self.energy.save_lifetime_energy(self.data)
 
+        # If WS is down and not already reconnecting, attempt to restore it.
+        # This auto-recovers from temporary cloud outages every poll cycle
+        # instead of permanently abandoning the WS connection.
+        if not ws_connected and not self.ws_manager._reconnecting:
+            try:
+                await self.ws_manager.connect()
+                if self.ws_manager.ws is not None:
+                    LOGGER.info("WebSocket restored during REST poll")
+            except (LevitonConnectionError, OSError):
+                LOGGER.debug("WebSocket restore attempt failed, will retry next poll")
+
         return self.data
 
     async def async_shutdown(self) -> None:
