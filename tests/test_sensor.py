@@ -834,20 +834,20 @@ async def test_sensor_setup_entry_creates_entities() -> None:
     panel_sensors = [e for e in added_entities if isinstance(e, LevitonPanelSensor)]
 
     # Both breakers are smart, exact count from exists_fn
-    # energy_import and lifetime_energy_import hidden by default (show_energy_import=False)
-    _import_keys = {"lifetime_energy_import", "energy_import"}
+    # energy_import hidden by default (show_energy_import=False)
+    # lifetime_energy_import always shown (diagnostic)
     expected_breaker = sum(
         1 for d in BREAKER_SENSORS
-        if d.exists_fn(gen1) and d.key not in _import_keys
+        if d.exists_fn(gen1) and d.key != "energy_import"
     ) + sum(
         1 for d in BREAKER_SENSORS
-        if d.exists_fn(gen2) and d.key not in _import_keys
+        if d.exists_fn(gen2) and d.key != "energy_import"
     )
     assert len(breaker_sensors) == expected_breaker
-    # 1 CT × descriptions (minus import sensors, hidden by default)
+    # 1 CT × descriptions (minus daily energy_import, hidden by default)
     expected_ct = sum(
         1 for d in CT_SENSORS
-        if d.exists_fn(ct) and d.key not in _import_keys
+        if d.exists_fn(ct) and d.key != "energy_import"
     )
     assert len(ct_sensors) == expected_ct
     # 1 WHEM × 22 descriptions

@@ -61,7 +61,7 @@
           "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
           "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
           "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado.",
-          "show_energy_import": "Mostrar sensores de importaci\u00f3n de energ\u00eda diaria y acumulada para interruptores y CTs que reportan datos de importaci\u00f3n.",
+          "show_energy_import": "Mostrar sensores de importaci\u00f3n de energ\u00eda diaria para interruptores y CTs que reportan datos de importaci\u00f3n.",
           "stagger_delay": "Retardo en segundos entre cada comando de interruptor para los botones Apagar todos, Encender todos y Disparar todos."
         }
       }
@@ -96,7 +96,7 @@
           "read_only": "Cuando est\u00e1 activado, no se crean controles de disparo, encendido/apagado ni LED. Solo se muestran sensores y diagn\u00f3sticos.",
           "calculated_current": "Derivar el amperaje de potencia/voltaje en lugar del campo rmsCurrent de la API para mayor precisi\u00f3n.",
           "hide_dummy": "Ocultar interruptores b\u00e1sicos que no tienen un sensor CT LSBMA conectado.",
-          "show_energy_import": "Mostrar sensores de importaci\u00f3n de energ\u00eda diaria y acumulada para interruptores y CTs que reportan datos de importaci\u00f3n.",
+          "show_energy_import": "Mostrar sensores de importaci\u00f3n de energ\u00eda diaria para interruptores y CTs que reportan datos de importaci\u00f3n.",
           "stagger_delay": "Retardo en segundos entre cada comando de interruptor para los botones Apagar todos, Encender todos y Disparar todos."
         }
       }

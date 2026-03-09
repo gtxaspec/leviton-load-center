@@ -53,7 +53,7 @@ async def async_setup_entry(
     show_import = entry.options.get(CONF_SHOW_ENERGY_IMPORT, DEFAULT_SHOW_ENERGY_IMPORT)
 
     def _skip_import(key: str) -> bool:
-        return key in ("lifetime_energy_import", "energy_import") and not show_import
+        return key == "energy_import" and not show_import
 
     # Breaker sensors
     for breaker_id, breaker in data.breakers.items():
@@ -98,12 +98,11 @@ async def async_setup_entry(
     LOGGER.debug("Sensor platform: created %d entities", len(entities))
     async_add_entities(entities)
 
-    # Remove stale import entities from the registry when the toggle is off
+    # Remove stale daily import entities from the registry when the toggle is off
     if not show_import:
         registry = er.async_get(hass)
-        import_suffixes = ("_energy_import", "_lifetime_energy_import")
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
-            if reg_entry.unique_id.endswith(import_suffixes):
+            if reg_entry.unique_id.endswith("_energy_import") and not reg_entry.unique_id.endswith("_lifetime_energy_import"):
                 LOGGER.debug("Removing stale import entity: %s", reg_entry.entity_id)
                 registry.async_remove(reg_entry.entity_id)
 
