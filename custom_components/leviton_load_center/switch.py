@@ -11,6 +11,7 @@ from homeassistant.components.switch import (
     SwitchEntity,
     SwitchEntityDescription,
 )
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -41,6 +42,7 @@ BREAKER_SWITCH_DESCRIPTION = SwitchEntityDescription(
 IDENTIFY_SWITCH_DESCRIPTION = SwitchEntityDescription(
     key="identify",
     translation_key="identify",
+    entity_category=EntityCategory.CONFIG,
 )
 
 
