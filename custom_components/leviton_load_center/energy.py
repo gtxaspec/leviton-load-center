@@ -269,6 +269,7 @@ class EnergyTracker:
         if not self._baselines_provisional:
             return False
         self._baselines_provisional = False
+        updated = False
 
         for breaker_id, breaker in data.breakers.items():
             if breaker.energy_consumption is None:
@@ -287,25 +288,37 @@ class EnergyTracker:
                 )
                 snapshot_daily_baselines(data)
                 await self._save_baselines(data)
-                return True
+                updated = True
+                break
 
-        for ct_id, ct in data.cts.items():
-            ct_total = (ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0)
-            baseline = data.daily_baselines.get(f"ct_{ct_id}", 0)
-            if ct_total > 1.0 and baseline < ct_total * 0.1:
-                LOGGER.warning(
-                    "Baselines stale (bandwidth-1 deltas detected: "
-                    "CT %s baseline=%.3f, lifetime=%.3f), re-snapshotting",
-                    ct_id,
-                    baseline,
-                    ct_total,
+        if not updated:
+            for ct_id, ct in data.cts.items():
+                ct_total = (ct.energy_consumption or 0) + (
+                    ct.energy_consumption_2 or 0
                 )
-                snapshot_daily_baselines(data)
-                await self._save_baselines(data)
-                return True
+                baseline = data.daily_baselines.get(f"ct_{ct_id}", 0)
+                if ct_total > 1.0 and baseline < ct_total * 0.1:
+                    LOGGER.warning(
+                        "Baselines stale (bandwidth-1 deltas detected: "
+                        "CT %s baseline=%.3f, lifetime=%.3f), re-snapshotting",
+                        ct_id,
+                        baseline,
+                        ct_total,
+                    )
+                    snapshot_daily_baselines(data)
+                    await self._save_baselines(data)
+                    updated = True
+                    break
 
-        LOGGER.debug("Baseline validation passed, no delta contamination")
-        return False
+        if not updated:
+            LOGGER.debug("Baseline validation passed, no delta contamination")
+
+        # Always persist the lifetime cache after validation — by now WS has
+        # delivered correct lifetime values, replacing any stale deltas from
+        # the initial REST fetch. Without this, a restart before the next
+        # poll would reload the stale delta cache.
+        await self.save_lifetime_energy(data)
+        return updated
 
     async def save_lifetime_energy(self, data: LevitonData) -> None:
         """Persist current lifetime energy values for delta detection."""
