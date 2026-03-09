@@ -10,5 +10,5 @@
   "loggers": ["aioleviton"],
   "quality_scale": "silver",
   "requirements": ["aioleviton==0.3.3"],
-  "version": "0.2.1"
+  "version": "0.2.2"
 }
