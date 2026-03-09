@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -10,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
+from homeassistant.util import dt as dt_util
 
 from .const import LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
@@ -94,6 +96,11 @@ async def async_setup_entry(
 # --- Entity classes ---
 
 
+def _today_midnight() -> datetime:
+    """Return midnight of the current day in the local timezone."""
+    return dt_util.start_of_local_day()
+
+
 class LevitonBreakerSensor(LevitonEntity, SensorEntity):
     """Sensor entity for a Leviton breaker."""
 
@@ -110,6 +117,13 @@ class LevitonBreakerSensor(LevitonEntity, SensorEntity):
         """Initialize the breaker sensor."""
         super().__init__(coordinator, description, breaker_id, device_info)
         self._options = options
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Return the time of the last reset for daily energy sensors."""
+        if self.entity_description.key == "energy":
+            return _today_midnight()
+        return None
 
     @property
     def native_value(self) -> StateType:
@@ -135,6 +149,13 @@ class LevitonCtSensor(LevitonEntity, SensorEntity):
     _collection = "cts"
 
     @property
+    def last_reset(self) -> datetime | None:
+        """Return the time of the last reset for daily energy sensors."""
+        if self.entity_description.key == "energy":
+            return _today_midnight()
+        return None
+
+    @property
     def native_value(self) -> StateType:
         """Return the sensor value."""
         ct = self.coordinator.data.cts.get(self._device_id)
@@ -156,6 +177,13 @@ class LevitonWhemSensor(LevitonEntity, SensorEntity):
     _collection = "whems"
 
     @property
+    def last_reset(self) -> datetime | None:
+        """Return the time of the last reset for daily energy sensors."""
+        if self.entity_description.key == "energy":
+            return _today_midnight()
+        return None
+
+    @property
     def native_value(self) -> StateType:
         """Return the sensor value."""
         whem = self.coordinator.data.whems.get(self._device_id)
@@ -175,6 +203,13 @@ class LevitonPanelSensor(LevitonEntity, SensorEntity):
 
     entity_description: LevitonPanelSensorDescription
     _collection = "panels"
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Return the time of the last reset for daily energy sensors."""
+        if self.entity_description.key == "energy":
+            return _today_midnight()
+        return None
 
     @property
     def native_value(self) -> StateType:
