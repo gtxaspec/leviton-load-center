@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from aioleviton import (
@@ -20,7 +21,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-from homeassistant.core import callback
+
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -125,7 +126,6 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
-    @callback
     def async_get_options_flow(
         config_entry: ConfigEntry,
     ) -> LevitonOptionsFlow:
@@ -213,7 +213,7 @@ class LevitonConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(
         self,
-        entry_data: dict[str, Any],
+        entry_data: Mapping[str, Any],
     ) -> ConfigFlowResult:
         """Handle reauth when token expires."""
         self._email = entry_data[CONF_EMAIL]
