@@ -453,12 +453,12 @@ def test_ct_power_with_none_leg() -> None:
 
 
 def test_ct_energy_with_none_legs() -> None:
-    """Test CT lifetime energy handles None values."""
+    """Test CT lifetime energy returns None when both legs are None."""
     ct = deepcopy(MOCK_CT)
     ct.energy_consumption = None
     ct.energy_consumption_2 = None
     desc = next(d for d in CT_SENSORS if d.key == "lifetime_energy")
-    assert desc.value_fn(ct, LevitonData()) == 0
+    assert desc.value_fn(ct, LevitonData()) is None
 
 
 # --- WHEM/panel leg edge cases ---
@@ -758,12 +758,21 @@ async def test_sensor_setup_entry_creates_entities() -> None:
     panel_sensors = [e for e in added_entities if isinstance(e, LevitonPanelSensor)]
 
     # Both breakers are smart, exact count from exists_fn
-    expected_breaker = sum(1 for d in BREAKER_SENSORS if d.exists_fn(gen1)) + sum(
-        1 for d in BREAKER_SENSORS if d.exists_fn(gen2)
+    # energy_import hidden by default (show_energy_import=False)
+    expected_breaker = sum(
+        1 for d in BREAKER_SENSORS
+        if d.exists_fn(gen1) and d.key != "lifetime_energy_import"
+    ) + sum(
+        1 for d in BREAKER_SENSORS
+        if d.exists_fn(gen2) and d.key != "lifetime_energy_import"
     )
     assert len(breaker_sensors) == expected_breaker
-    # 1 CT × 10 descriptions
-    assert len(ct_sensors) == len(CT_SENSORS)
+    # 1 CT × descriptions (minus lifetime_energy_import, hidden by default)
+    expected_ct = sum(
+        1 for d in CT_SENSORS
+        if d.exists_fn(ct) and d.key != "lifetime_energy_import"
+    )
+    assert len(ct_sensors) == expected_ct
     # 1 WHEM × 22 descriptions
     assert len(whem_sensors) == len(WHEM_SENSORS)
     # 1 panel × 25 descriptions

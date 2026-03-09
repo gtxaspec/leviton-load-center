@@ -32,6 +32,7 @@ from .const import (
     CONF_CALCULATED_CURRENT,
     CONF_HIDE_DUMMY,
     CONF_READ_ONLY,
+    CONF_SHOW_ENERGY_IMPORT,
     CONF_STAGGER_DELAY,
     CONF_TOKEN,
     CONF_USER_ID,
@@ -39,6 +40,7 @@ from .const import (
     DEFAULT_CALCULATED_CURRENT,
     DEFAULT_HIDE_DUMMY,
     DEFAULT_READ_ONLY,
+    DEFAULT_SHOW_ENERGY_IMPORT,
     DEFAULT_STAGGER_DELAY,
     DEFAULT_VOLTAGE_208,
     DOMAIN,
@@ -53,6 +55,7 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(CONF_READ_ONLY, default=DEFAULT_READ_ONLY): bool,
         vol.Optional(CONF_CALCULATED_CURRENT, default=DEFAULT_CALCULATED_CURRENT): bool,
         vol.Optional(CONF_HIDE_DUMMY, default=DEFAULT_HIDE_DUMMY): bool,
+        vol.Optional(CONF_SHOW_ENERGY_IMPORT, default=DEFAULT_SHOW_ENERGY_IMPORT): bool,
         vol.Optional(CONF_STAGGER_DELAY, default=DEFAULT_STAGGER_DELAY): NumberSelector(
             NumberSelectorConfig(
                 min=1,

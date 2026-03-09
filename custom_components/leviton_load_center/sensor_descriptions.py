@@ -73,6 +73,7 @@ class LevitonCtSensorDescription(SensorEntityDescription):
     """Describe a Leviton CT sensor."""
 
     value_fn: Callable[[Ct, LevitonData], Any]
+    exists_fn: Callable[[Ct], bool] = lambda _: True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -382,26 +383,46 @@ def _is_on_leg(position: int, leg: int) -> bool:
 
 
 def _panel_leg_power(panel: Panel, data: LevitonData, leg: int) -> int | None:
-    """Sum breaker power for a specific leg of a DAU panel."""
+    """Sum breaker power for a specific leg of a DAU panel.
+
+    For 2-pole breakers, power is attributed per-pole: power to leg 1,
+    power_2 to leg 2, based on the breaker's starting position.
+    """
     total = 0
     found = False
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id != panel.id:
             continue
-        if _is_on_leg(breaker.position, leg):
+        if breaker.poles == 2:
+            if _is_on_leg(breaker.position, leg):
+                total += breaker.power or 0
+            else:
+                total += breaker.power_2 or 0
+            found = True
+        elif _is_on_leg(breaker.position, leg):
             total += breaker.power or 0
             found = True
     return total if found else None
 
 
 def _panel_leg_current(panel: Panel, data: LevitonData, leg: int) -> int | None:
-    """Sum breaker current for a specific leg of a DAU panel."""
+    """Sum breaker current for a specific leg of a DAU panel.
+
+    For 2-pole breakers, current is attributed per-pole: rms_current to
+    leg 1, rms_current_2 to leg 2, based on the breaker's starting position.
+    """
     total = 0
     found = False
     for breaker in data.breakers.values():
         if breaker.residential_breaker_panel_id != panel.id:
             continue
-        if _is_on_leg(breaker.position, leg):
+        if breaker.poles == 2:
+            if _is_on_leg(breaker.position, leg):
+                total += breaker.rms_current or 0
+            else:
+                total += breaker.rms_current_2 or 0
+            found = True
+        elif _is_on_leg(breaker.position, leg):
             total += breaker.rms_current or 0
             found = True
     return total if found else None
@@ -433,8 +454,10 @@ def _panel_frequency(panel: Panel, data: LevitonData, leg: int) -> float | None:
     return None
 
 
-def _ct_energy(ct: Ct) -> float:
+def _ct_energy(ct: Ct) -> float | None:
     """Total lifetime energy across both legs of a CT."""
+    if ct.energy_consumption is None and ct.energy_consumption_2 is None:
+        return None
     return round((ct.energy_consumption or 0) + (ct.energy_consumption_2 or 0), 3)
 
 
@@ -664,6 +687,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         value_fn=lambda c, _d: round(
             (c.energy_import or 0) + (c.energy_import_2 or 0), 3
         ),
+        exists_fn=lambda c: c.energy_import is not None,
     ),
     LevitonCtSensorDescription(
         key="usage_type",

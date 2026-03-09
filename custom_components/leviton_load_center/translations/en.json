@@ -53,6 +53,7 @@
           "read_only": "Read-only mode (disable controls)",
           "calculated_current": "Calculate current from power",
           "hide_dummy": "Hide non-smart breakers",
+          "show_energy_import": "Show energy import sensors",
           "stagger_delay": "Stagger delay (seconds)"
         },
         "data_description": {
@@ -60,6 +61,7 @@
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
           "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached.",
+          "show_energy_import": "Show lifetime energy import sensors for breakers and CTs that report import data.",
           "stagger_delay": "Delay in seconds between each breaker command for All Off, All On, and Trip All buttons."
         }
       }
@@ -86,6 +88,7 @@
           "read_only": "Read-only mode (disable controls)",
           "calculated_current": "Calculate current from power",
           "hide_dummy": "Hide non-smart breakers",
+          "show_energy_import": "Show energy import sensors",
           "stagger_delay": "Stagger delay (seconds)"
         },
         "data_description": {
@@ -93,6 +96,7 @@
           "read_only": "When enabled, trip, on/off, and LED controls are not created. Only sensors and diagnostics are shown.",
           "calculated_current": "Derive amperage from power/voltage instead of the API's rmsCurrent field for higher precision.",
           "hide_dummy": "Hide basic breakers that don't have an LSBMA CT sensor attached.",
+          "show_energy_import": "Show lifetime energy import sensors for breakers and CTs that report import data.",
           "stagger_delay": "Delay in seconds between each breaker command for All Off, All On, and Trip All buttons."
         }
       }

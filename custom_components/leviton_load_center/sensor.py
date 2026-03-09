@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
 
-from .const import LOGGER
+from .const import CONF_SHOW_ENERGY_IMPORT, DEFAULT_SHOW_ENERGY_IMPORT, LOGGER
 from .coordinator import LevitonConfigEntry, LevitonCoordinator
 from .entity import (
     LevitonEntity,
@@ -49,6 +49,10 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     data = coordinator.data
     entities: list[SensorEntity] = []
+    show_import = entry.options.get(CONF_SHOW_ENERGY_IMPORT, DEFAULT_SHOW_ENERGY_IMPORT)
+
+    def _skip_import(key: str) -> bool:
+        return key == "lifetime_energy_import" and not show_import
 
     # Breaker sensors
     for breaker_id, breaker in data.breakers.items():
@@ -60,7 +64,7 @@ async def async_setup_entry(
                 coordinator, desc, breaker_id, dev_info, entry.options
             )
             for desc in BREAKER_SENSORS
-            if desc.exists_fn(breaker)
+            if desc.exists_fn(breaker) and not _skip_import(desc.key)
         )
 
     # CT sensors (skip unused channels)
@@ -71,6 +75,7 @@ async def async_setup_entry(
         entities.extend(
             LevitonCtSensor(coordinator, desc, ct_id, dev_info)
             for desc in CT_SENSORS
+            if desc.exists_fn(ct) and not _skip_import(desc.key)
         )
 
     # WHEM sensors
