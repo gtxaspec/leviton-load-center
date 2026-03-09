@@ -503,7 +503,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=lambda b, d, _o: calc_daily_energy(b.id, _breaker_energy(b), d),
         exists_fn=lambda b: b.is_smart or b.has_lsbma,
@@ -523,7 +523,7 @@ BREAKER_SENSORS: tuple[LevitonBreakerSensorDescription, ...] = (
         translation_key="energy_import",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=lambda b, d, _o: calc_daily_energy(
             f"{b.id}_import", _breaker_energy_import(b), d
@@ -655,7 +655,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=lambda c, d: calc_daily_energy(f"ct_{c.id}", _ct_energy(c), d),
     ),
@@ -710,7 +710,7 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         translation_key="energy_import",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=lambda c, d: calc_daily_energy(
             f"ct_{c.id}_import", _ct_energy_import(c), d
@@ -761,7 +761,7 @@ WHEM_SENSORS: tuple[LevitonWhemSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=_whem_daily_energy,
     ),
@@ -936,7 +936,7 @@ PANEL_SENSORS: tuple[LevitonPanelSensorDescription, ...] = (
         translation_key="energy",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=_panel_daily_energy,
     ),

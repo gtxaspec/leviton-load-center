@@ -337,6 +337,7 @@ class EnergyTracker:
         snapshot_daily_baselines(data)
         await self._save_baselines(data)
         await self.save_lifetime_energy(data)
+        self._energy_high_water.clear()
 
     def clamp_increasing(self, key: str, value: float) -> float:
         """Ensure a TOTAL_INCREASING value never decreases.
