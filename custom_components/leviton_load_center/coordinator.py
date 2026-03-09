@@ -340,7 +340,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                         await self.client.set_whem_bandwidth(whem_id, bandwidth=0)
                         await asyncio.sleep(1)
                     except LevitonConnectionError:
-                        pass
+                        LOGGER.debug("Failed to reset bandwidth for WHEM %s", whem_id)
 
                     whem = await self.client.get_whem(whem_id)
                     self.data.whems[whem_id] = whem
@@ -362,7 +362,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
                         await self.client.set_panel_bandwidth(panel_id, enabled=False)
                         await asyncio.sleep(1)
                     except LevitonConnectionError:
-                        pass
+                        LOGGER.debug("Failed to reset bandwidth for panel %s", panel_id)
 
                 panel = await self.client.get_panel(panel_id)
                 self.data.panels[panel_id] = panel
