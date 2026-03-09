@@ -638,7 +638,9 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda c, _d: (c.active_power or 0) + (c.active_power_2 or 0),
+        value_fn=lambda c, _d: (c.active_power or 0) + (c.active_power_2 or 0)
+        if c.active_power is not None or c.active_power_2 is not None
+        else None,
     ),
     LevitonCtSensorDescription(
         key="current",
@@ -646,7 +648,9 @@ CT_SENSORS: tuple[LevitonCtSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda c, _d: (c.rms_current or 0) + (c.rms_current_2 or 0),
+        value_fn=lambda c, _d: (c.rms_current or 0) + (c.rms_current_2 or 0)
+        if c.rms_current is not None or c.rms_current_2 is not None
+        else None,
     ),
     LevitonCtSensorDescription(
         key="energy",
