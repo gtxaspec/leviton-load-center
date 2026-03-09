@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
@@ -96,6 +97,15 @@ async def async_setup_entry(
 
     LOGGER.debug("Sensor platform: created %d entities", len(entities))
     async_add_entities(entities)
+
+    # Remove stale import entities from the registry when the toggle is off
+    if not show_import:
+        registry = er.async_get(hass)
+        import_suffixes = ("_energy_import", "_lifetime_energy_import")
+        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if reg_entry.unique_id.endswith(import_suffixes):
+                LOGGER.debug("Removing stale import entity: %s", reg_entry.entity_id)
+                registry.async_remove(reg_entry.entity_id)
 
 
 # --- Entity classes ---
