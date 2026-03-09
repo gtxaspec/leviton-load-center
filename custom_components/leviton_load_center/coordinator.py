@@ -383,7 +383,7 @@ class LevitonCoordinator(DataUpdateCoordinator[LevitonData]):
         # If WS is down and not already reconnecting, attempt to restore it.
         # This auto-recovers from temporary cloud outages every poll cycle
         # instead of permanently abandoning the WS connection.
-        if not ws_connected and not self.ws_manager._reconnecting:
+        if not ws_connected and not self.ws_manager.reconnecting:
             try:
                 await self.ws_manager.connect()
                 if self.ws_manager.ws is not None:

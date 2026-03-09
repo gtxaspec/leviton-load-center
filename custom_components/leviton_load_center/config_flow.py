@@ -21,7 +21,6 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,

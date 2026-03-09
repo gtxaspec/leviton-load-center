@@ -57,6 +57,11 @@ class WebSocketManager:
         self._watchdog_unsub: Callable[[], None] | None = None
         self._bandwidth_unsub: Callable[[], None] | None = None
 
+    @property
+    def reconnecting(self) -> bool:
+        """Return whether a reconnection attempt is in progress."""
+        return self._reconnecting
+
     async def connect(self) -> None:
         """Connect WebSocket and subscribe to all hubs."""
         coordinator = self.coordinator
