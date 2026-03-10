@@ -56,6 +56,8 @@ class WebSocketManager:
         self._keepalive_unsub: Callable[[], None] | None = None
         self._watchdog_unsub: Callable[[], None] | None = None
         self._bandwidth_unsub: Callable[[], None] | None = None
+        self._bandwidth_failures: int = 0
+        self._bandwidth_skip_count: int = 0
 
     @property
     def reconnecting(self) -> bool:
@@ -83,8 +85,10 @@ class WebSocketManager:
 
         LOGGER.debug("WebSocket connected")
 
-        # Reset staleness clock on new connection
+        # Reset staleness clock and bandwidth backoff on new connection
         self._last_ws_notification = time.monotonic()
+        self._bandwidth_failures = 0
+        self._bandwidth_skip_count = 0
 
         # Register callbacks
         self._ws_remove_notification = self.ws.on_notification(
@@ -272,10 +276,24 @@ class WebSocketManager:
         The WHEM needs to see a 0->1 transition to push new readings.
         Just sending 1 repeatedly doesn't trigger a refresh after the
         initial auto-revert from 1 to 2.
+
+        Backs off exponentially on consecutive failures to avoid flooding
+        a down API with 4,320+ failed requests/day.
         """
         if self.ws is None:
             return
+        # Skip this cycle if backing off from previous failures.
+        # Backoff: skip 2^(failures-1) - 1 cycles (0, 1, 3, 7, 15 skips).
+        # At 60s interval: ~1min, ~2min, ~4min, ~8min, ~16min between retries.
+        if self._bandwidth_failures > 0:
+            skip_cycles = (1 << min(self._bandwidth_failures - 1, 4)) - 1
+            if self._bandwidth_skip_count < skip_cycles:
+                self._bandwidth_skip_count += 1
+                return
+            self._bandwidth_skip_count = 0
+
         client = self.coordinator.client
+        failed = False
         for whem_id in self.coordinator.data.whems:
             try:
                 await client.set_whem_bandwidth(whem_id, bandwidth=1)
@@ -283,6 +301,13 @@ class WebSocketManager:
                 await client.set_whem_bandwidth(whem_id, bandwidth=1)
             except LevitonConnectionError:
                 LOGGER.warning("Bandwidth keepalive failed for WHEM %s", whem_id)
+                failed = True
+
+        if failed:
+            self._bandwidth_failures = min(self._bandwidth_failures + 1, 5)
+        elif self._bandwidth_failures > 0:
+            LOGGER.debug("Bandwidth keepalive recovered after %d failures", self._bandwidth_failures)
+            self._bandwidth_failures = 0
 
     def _apply_breaker_ws_update(self, breaker_data: dict[str, Any]) -> bool:
         """Apply a single breaker update from a WS notification.
