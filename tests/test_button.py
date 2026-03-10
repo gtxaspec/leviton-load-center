@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 
@@ -32,6 +33,8 @@ from homeassistant.components.leviton_load_center.entity import (
 )
 from homeassistant.exceptions import HomeAssistantError
 
+from homeassistant.components.leviton_load_center.const import CONF_STAGGER_DELAY
+
 from .conftest import MOCK_BREAKER_GEN1, MOCK_BREAKER_GEN2, MOCK_PANEL, MOCK_WHEM
 
 
@@ -41,7 +44,16 @@ def _make_coordinator(data, mock_client):
     coordinator.data = data
     coordinator.client = mock_client
     coordinator.async_request_refresh = AsyncMock()
-    coordinator.config_entry.options = {}
+    coordinator.config_entry.options = {CONF_STAGGER_DELAY: 0}
+    # Store background tasks so tests can await them.
+    coordinator._bg_tasks = []
+
+    def _capture_bg_task(hass, coro, name):
+        task = asyncio.ensure_future(coro)
+        coordinator._bg_tasks.append(task)
+        return task
+
+    coordinator.config_entry.async_create_background_task = _capture_bg_task
     return coordinator
 
 
@@ -248,6 +260,7 @@ async def test_all_off_button_gen2_turn_off_gen1_trip(mock_client) -> None:
     )
 
     await button.async_press()
+    await asyncio.gather(*coordinator._bg_tasks)
 
     mock_client.trip_breaker.assert_called_once_with(gen1.id)
     mock_client.turn_off_breaker.assert_called_once_with(gen2.id)
@@ -272,6 +285,7 @@ async def test_all_on_button_skips_gen1(mock_client) -> None:
     )
 
     await button.async_press()
+    await asyncio.gather(*coordinator._bg_tasks)
 
     mock_client.turn_on_breaker.assert_called_once_with(gen2.id)
     assert gen2.remote_state == "RemoteON"
@@ -300,6 +314,7 @@ async def test_trip_all_button_trips_all_panel_breakers(mock_client) -> None:
     )
 
     await button.async_press()
+    await asyncio.gather(*coordinator._bg_tasks)
 
     assert mock_client.trip_breaker.call_count == 2
     mock_client.trip_breaker.assert_any_call(b1.id)
@@ -326,14 +341,15 @@ async def test_all_off_button_only_targets_own_whem(mock_client) -> None:
     )
 
     await button.async_press()
+    await asyncio.gather(*coordinator._bg_tasks)
 
     # Only gen1 should be tripped (belongs to this WHEM)
     mock_client.trip_breaker.assert_called_once_with(gen1.id)
     mock_client.turn_off_breaker.assert_not_called()
 
 
-async def test_all_off_error_raises_ha_error(mock_client) -> None:
-    """Test All Off raises HomeAssistantError on connection failure."""
+async def test_all_off_error_logs_instead_of_raising(mock_client, caplog) -> None:
+    """Test All Off logs errors instead of raising (runs in background)."""
     gen1 = deepcopy(MOCK_BREAKER_GEN1)
     whem = deepcopy(MOCK_WHEM)
     data = LevitonData(
@@ -349,8 +365,10 @@ async def test_all_off_error_raises_ha_error(mock_client) -> None:
         coordinator, ALL_OFF_BUTTON_DESCRIPTION, whem.id, dev_info
     )
 
-    with pytest.raises(HomeAssistantError):
-        await button.async_press()
+    await button.async_press()
+    await asyncio.gather(*coordinator._bg_tasks)
+
+    assert "1 error(s)" in caplog.text
 
 
 async def test_setup_panel_trip_all_button() -> None:

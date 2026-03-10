@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from aioleviton import LevitonConnectionError
 
@@ -181,96 +182,112 @@ class LevitonWhemIdentifyButton(LevitonEntity, ButtonEntity):
             ) from err
 
 
-class LevitonWhemAllOffButton(LevitonEntity, ButtonEntity):
+class _BulkButtonMixin(LevitonEntity, ButtonEntity):
+    """Mixin for bulk breaker operations that may exceed HA's service call timeout.
+
+    Large panels (up to 66 breakers × 2s stagger = 132s) can exceed the
+    60-second timeout. The staggered loop runs as a background task so
+    async_press returns immediately.
+    """
+
+    async def _execute_bulk(
+        self,
+        children: list[tuple[str, Any]],
+        action_name: str,
+    ) -> None:
+        """Run the staggered bulk operation in the background."""
+        delay = self.coordinator.config_entry.options.get(
+            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
+        )
+        errors: list[str] = []
+        for i, (breaker_id, breaker) in enumerate(children):
+            if i > 0:
+                await asyncio.sleep(delay)
+            try:
+                await self._control_breaker(breaker_id, breaker)
+            except LevitonConnectionError as err:
+                LOGGER.warning("%s: breaker %s failed: %s", action_name, breaker_id, err)
+                errors.append(f"{breaker_id}: {err}")
+        self.coordinator.async_set_updated_data(self.coordinator.data)
+        if errors:
+            LOGGER.error(
+                "%s completed with %d error(s): %s",
+                action_name,
+                len(errors),
+                ", ".join(errors),
+            )
+
+    async def _control_breaker(self, breaker_id: str, breaker: Any) -> None:
+        """Control a single breaker. Override in subclasses."""
+        raise NotImplementedError
+
+
+class LevitonWhemAllOffButton(_BulkButtonMixin):
     """Button to turn off all breakers on a WHEM hub."""
 
     _collection = "whems"
 
+    async def _control_breaker(self, breaker_id: str, breaker: Any) -> None:
+        """Turn off or trip a single breaker."""
+        if breaker.can_remote_on:
+            await self.coordinator.client.turn_off_breaker(breaker_id)
+            breaker.remote_state = STATE_REMOTE_OFF
+        else:
+            await self.coordinator.client.trip_breaker(breaker_id)
+            breaker.current_state = STATE_SOFTWARE_TRIP
+
     async def async_press(self) -> None:
-        """Turn off all child breakers sequentially."""
-        delay = self.coordinator.config_entry.options.get(
-            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
-        )
+        """Turn off all child breakers in a background task."""
         children = [
             (bid, b)
             for bid, b in self.coordinator.data.breakers.items()
             if b.iot_whem_id == self._device_id and b.is_smart
         ]
         LOGGER.debug("All Off for WHEM %s: %d breakers", self._device_id, len(children))
-        errors: list[str] = []
-        for i, (breaker_id, breaker) in enumerate(children):
-            if i > 0:
-                await asyncio.sleep(delay)
-            try:
-                if breaker.can_remote_on:
-                    await self.coordinator.client.turn_off_breaker(breaker_id)
-                    breaker.remote_state = STATE_REMOTE_OFF
-                else:
-                    await self.coordinator.client.trip_breaker(breaker_id)
-                    breaker.current_state = STATE_SOFTWARE_TRIP
-            except LevitonConnectionError as err:
-                LOGGER.warning("All Off: breaker %s failed: %s", breaker_id, err)
-                errors.append(f"{breaker_id}: {err}")
-        self.coordinator.async_set_updated_data(self.coordinator.data)
-        if errors:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="bulk_control_failed",
-                translation_placeholders={
-                    "name": ", ".join(errors),
-                    "error": f"{len(errors)} breaker(s) failed",
-                },
-            )
+        self.coordinator.config_entry.async_create_background_task(
+            self.hass,
+            self._execute_bulk(children, "All Off"),
+            f"leviton_all_off_{self._device_id}",
+        )
 
 
-class LevitonWhemAllOnButton(LevitonEntity, ButtonEntity):
+class LevitonWhemAllOnButton(_BulkButtonMixin):
     """Button to turn on all Gen 2 breakers on a WHEM hub."""
 
     _collection = "whems"
 
+    async def _control_breaker(self, breaker_id: str, breaker: Any) -> None:
+        """Turn on a single breaker."""
+        await self.coordinator.client.turn_on_breaker(breaker_id)
+        breaker.remote_state = STATE_REMOTE_ON
+
     async def async_press(self) -> None:
-        """Turn on all Gen 2 child breakers sequentially."""
-        delay = self.coordinator.config_entry.options.get(
-            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
-        )
+        """Turn on all Gen 2 child breakers in a background task."""
         children = [
             (bid, b)
             for bid, b in self.coordinator.data.breakers.items()
             if b.iot_whem_id == self._device_id and b.is_smart and b.can_remote_on
         ]
         LOGGER.debug("All On for WHEM %s: %d breakers", self._device_id, len(children))
-        errors: list[str] = []
-        for i, (breaker_id, breaker) in enumerate(children):
-            if i > 0:
-                await asyncio.sleep(delay)
-            try:
-                await self.coordinator.client.turn_on_breaker(breaker_id)
-                breaker.remote_state = STATE_REMOTE_ON
-            except LevitonConnectionError as err:
-                LOGGER.warning("All On: breaker %s failed: %s", breaker_id, err)
-                errors.append(f"{breaker_id}: {err}")
-        self.coordinator.async_set_updated_data(self.coordinator.data)
-        if errors:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="bulk_control_failed",
-                translation_placeholders={
-                    "name": ", ".join(errors),
-                    "error": f"{len(errors)} breaker(s) failed",
-                },
-            )
+        self.coordinator.config_entry.async_create_background_task(
+            self.hass,
+            self._execute_bulk(children, "All On"),
+            f"leviton_all_on_{self._device_id}",
+        )
 
 
-class LevitonPanelTripAllButton(LevitonEntity, ButtonEntity):
+class LevitonPanelTripAllButton(_BulkButtonMixin):
     """Button to trip all breakers on an LDATA panel."""
 
     _collection = "panels"
 
+    async def _control_breaker(self, breaker_id: str, breaker: Any) -> None:
+        """Trip a single breaker."""
+        await self.coordinator.client.trip_breaker(breaker_id)
+        breaker.current_state = STATE_SOFTWARE_TRIP
+
     async def async_press(self) -> None:
-        """Trip all child breakers sequentially."""
-        delay = self.coordinator.config_entry.options.get(
-            CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY
-        )
+        """Trip all child breakers in a background task."""
         children = [
             (bid, b)
             for bid, b in self.coordinator.data.breakers.items()
@@ -279,23 +296,8 @@ class LevitonPanelTripAllButton(LevitonEntity, ButtonEntity):
         LOGGER.debug(
             "Trip All for panel %s: %d breakers", self._device_id, len(children)
         )
-        errors: list[str] = []
-        for i, (breaker_id, breaker) in enumerate(children):
-            if i > 0:
-                await asyncio.sleep(delay)
-            try:
-                await self.coordinator.client.trip_breaker(breaker_id)
-                breaker.current_state = STATE_SOFTWARE_TRIP
-            except LevitonConnectionError as err:
-                LOGGER.warning("Trip All: breaker %s failed: %s", breaker_id, err)
-                errors.append(f"{breaker_id}: {err}")
-        self.coordinator.async_set_updated_data(self.coordinator.data)
-        if errors:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="bulk_control_failed",
-                translation_placeholders={
-                    "name": ", ".join(errors),
-                    "error": f"{len(errors)} breaker(s) failed",
-                },
-            )
+        self.coordinator.config_entry.async_create_background_task(
+            self.hass,
+            self._execute_bulk(children, "Trip All"),
+            f"leviton_trip_all_{self._device_id}",
+        )
